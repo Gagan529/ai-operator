@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets: never commit keys
+.env
+.env.*
+!.env.example
+*.key
+
+# Run artefacts
+runs/
+logs/
+*.log
+screenshots/
+.playwright/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
