@@ -20,7 +20,7 @@ def now() -> str:
 
 
 # ---------- What the LLM may propose ----------
-Tool = Literal["goto", "click", "fill", "select", "read", "done"]
+Tool = Literal["goto", "click", "fill", "select", "read", "note", "done"]
 
 
 class ProposedAction(BaseModel):
@@ -30,12 +30,13 @@ class ProposedAction(BaseModel):
     tool: Tool
     ref: str | None = Field(None, description="data-aiop-ref of the target element (click/fill/select)")
     url: str | None = Field(None, description="absolute or site-relative URL (goto)")
-    value: str | None = Field(None, description="text to type (fill) or option label (select)")
+    value: str | None = Field(None, description="text to type (fill), option label (select) or fact to remember (note)")
     reason: str = Field("", description="one line: why this step, or the summary when tool=done")
 
     @model_validator(mode="after")
     def _needs_args(self) -> ProposedAction:
-        need = {"goto": ["url"], "click": ["ref"], "fill": ["ref", "value"], "select": ["ref", "value"]}
+        need = {"goto": ["url"], "click": ["ref"], "fill": ["ref", "value"], "select": ["ref", "value"],
+                "note": ["value"]}
         missing = [f for f in need.get(self.tool, []) if getattr(self, f) is None]
         if missing:
             raise ValueError(f"{self.tool} needs {', '.join(missing)}")
@@ -185,7 +186,12 @@ class Budgets(BaseModel):
     max_steps: int = 60
     max_retries_per_step: int = 3
     max_replans: int = 2
-    loop_window: int = 3                   # same action + same page this many times -> stop
+    loop_window: int = 3                   # same action + same page this many times in a row -> stop
+    cycle_window: int = 8                  # cycle guard looks at this many recent steps:
+    cycle_warn: int = 3                    #   a step seen this often -> refuse it once, with a warning
+                                           #   seen once more after that -> stop
+    max_note_chars: int = 300              # per note
+    max_notes_chars: int = 4000            # all notes together
 
 
 class RunState(BaseModel):
@@ -203,6 +209,7 @@ class RunState(BaseModel):
     verification_ref: str | None = None
     event_ids: list[str] = []
     history: list[str] = []                # one line per executed step, shown to the proposer
+    notes: list[str] = []                  # the operator's working memory (the `note` tool), capped
     feedback: str | None = None            # runtime -> proposer note about the last proposal
     approved: dict[str, int] = {}          # effect -> number of human-approved actions
     failures_in_row: int = 0

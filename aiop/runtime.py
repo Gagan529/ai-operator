@@ -63,7 +63,8 @@ class Runtime:
         try:
             action = self.proposer.propose_action(self._ctx(state))
         except (ProposalError, ValueError) as e:
-            return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION, message=str(e)[:300]))
+            kind = FailureKind.TRANSIENT if getattr(e, "transient", False) else FailureKind.INVALID_ACTION
+            return self._failed(state, Failure(kind=kind, message=str(e)[:300]))
         finally:
             self._tokens(state)
         state.pending_action = action
@@ -74,10 +75,19 @@ class Runtime:
             return self._verify(state, claim=action.reason)
 
         page = state.last_observation.url if state.last_observation else ""
-        state.recent_keys = (state.recent_keys + [f"{action.key()}@{page}"])[-state.budgets.loop_window:]
-        if len(state.recent_keys) == state.budgets.loop_window and len(set(state.recent_keys)) == 1:
-            return self._stop(state, RunStatus.STOPPED,
-                              f"loop guard: the same step on the same page {state.budgets.loop_window} times")
+        b = state.budgets
+        key = f"{action.key()}@{page}"
+        state.recent_keys = (state.recent_keys + [key])[-max(b.loop_window, b.cycle_window):]
+        last = state.recent_keys[-b.loop_window:]
+        if len(last) == b.loop_window and len(set(last)) == 1:
+            return self._stop(state, RunStatus.STOPPED, f"loop guard: the same step on the same page {b.loop_window} times")
+        seen = state.recent_keys[-b.cycle_window:].count(key)
+        if seen > b.cycle_warn:
+            return self._stop(state, RunStatus.STOPPED, f"loop guard: going in circles ({_describe(action)} on {page})")
+        if seen == b.cycle_warn:
+            return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION, message=(
+                f"you are going in circles: '{_describe(action)}' on this page {seen} times in the last "
+                f"{b.cycle_window} steps. Use note to save what you need from a page, then move on")))
 
         target: Target | None = None
         if action.tool == "click":
@@ -93,7 +103,21 @@ class Runtime:
                                                message=f"denied by {decision.rule}: {decision.reason}"))
         if decision.decision == Decision.APPROVAL_REQUIRED:
             return self._await_approval(state, action, decision, target)
+        if action.tool == "note":
+            return self._note(state, action.value or "")
         self._execute(state, action, target)
+        return state
+
+    def _note(self, state: RunState, text: str) -> RunState:
+        """Working memory: facts the model will need on later pages. Kept small and capped."""
+        b = state.budgets
+        text = " ".join(text.split())[:b.max_note_chars]
+        if sum(len(n) for n in state.notes) + len(text) > b.max_notes_chars:
+            return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION,
+                                               message="notes are full; keep only what you still need"))
+        state.notes.append(text)
+        state.failures_in_row = 0
+        state.history.append(f"{state.step}. noted: {text[:80]}")
         return state
 
     # ---------- approvals ----------
@@ -288,7 +312,7 @@ class Runtime:
         if self._snapshot is None:           # e.g. after resuming from a checkpoint
             self._snapshot = self.browser.read().observation.snapshot
         return Context(task=state.task, sop=self.company.sop, snapshot=self._snapshot,
-                       plan=state.plan, history=state.history, feedback=state.feedback)
+                       plan=state.plan, history=state.history, feedback=state.feedback, notes=state.notes)
 
     def _tokens(self, state: RunState) -> None:
         state.tokens_in = self.proposer.tokens_in

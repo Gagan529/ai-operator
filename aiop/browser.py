@@ -81,6 +81,7 @@ _SNAPSHOT_JS = r"""
         return links.map(l => `[${tag(l)}] `).join('') + cut(clean(c.innerText), 200);
       });
       lines.push('| ' + cells.join(' | ') + ' |');
+      el.querySelectorAll('*').forEach(d => done.add(d));   // the row is shown once, not cell by cell again
       continue;
     }
     if (['P', 'LI', 'DIV', 'SPAN', 'TD', 'DD', 'DT'].includes(t)) {

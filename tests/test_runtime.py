@@ -100,3 +100,31 @@ def test_checkpoint_state_is_small(make_runtime):
     assert len(blob) < 20_000, len(blob)
     assert "URL: http" not in blob and ".png" not in blob     # no snapshots or screenshots inline
     assert st.last_observation.evidence_ref.startswith("observations/")
+
+
+def test_notes_are_working_memory(make_runtime):
+    rt, st = make_runtime([A(tool="note", value="R-12 needs Python, SQL, REST APIs; 2+ years"),
+                           A(tool="note", value="x" * 5000)] + screening() + [DONE])
+    rt.start(st)
+    rt.step(st)
+    assert st.notes == ["R-12 needs Python, SQL, REST APIs; 2+ years"]
+    assert "R-12 needs Python" in rt._ctx(st).notes[0]          # shown to the model on later steps
+    rt.step(st)                                                 # an oversized note is capped, not stored whole
+    assert len(st.notes[1]) == st.budgets.max_note_chars
+    rt.run_until_blocked(st)
+    assert st.status == RunStatus.VERIFIED
+
+
+def test_cycle_guard_warns_then_stops(make_runtime):
+    bounce = [A(tool="goto", url="/ats/role/R-12"), A(tool="goto", url="/ats")] * 6
+    rt, st = make_runtime(bounce)
+    rt.run_until_blocked(rt.start(st))
+    warnings = [e for e in rt.evidence.events() if e.kind == "failure" and "going in circles" in e.summary]
+    assert warnings                                             # the model was told first
+    assert st.status == RunStatus.STOPPED and "going in circles" in st.stop_reason
+
+
+def test_table_rows_appear_once(browser, company):
+    snap = browser.goto("/jobs").observation.snapshot
+    assert snap.count("Rohan Mehta") == 1
+    assert "| A-101 | Rohan Mehta |" in snap

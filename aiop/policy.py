@@ -33,6 +33,8 @@ class PolicyEngine:
                current_url: str = "") -> PolicyDecision:
         if action.tool in ("read", "done"):
             return _d(Decision.ALLOW, None, "observe", "reading the page changes nothing")
+        if action.tool == "note":
+            return _d(Decision.ALLOW, None, "memory", "a note changes nothing outside the run")
         if action.tool == "goto":
             return self._navigation(urlparse(action.url or "").path)
         if action.tool in ("fill", "select"):

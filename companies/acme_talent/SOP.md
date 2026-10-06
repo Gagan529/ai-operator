@@ -1,5 +1,10 @@
 # Acme Talent: Recruiting SOP (fictional company)
 
+## Where things are
+- **Job board:** every application with the applicant's resume and years of experience.
+- **ATS:** roles (requirements, interviewer) and each candidate's status; statuses are changed here.
+- **Calendar:** the interviewers' slots; interviews are booked here.
+
 ## Screening a role
 1. Read the role's must-have skills and minimum years in the ATS role page.
 2. A candidate is **shortlisted** only if their resume shows **every must-have skill** and **at least the minimum years**.
