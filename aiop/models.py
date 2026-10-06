@@ -20,7 +20,8 @@ def now() -> str:
 
 
 # ---------- What the LLM may propose ----------
-Tool = Literal["goto", "click", "fill", "select", "read", "note", "done"]
+Tool = Literal["goto", "click", "fill", "select", "submit_form", "read", "note", "done"]
+REF_TOOLS = ("click", "fill", "select")   # tools whose ref only means something on the current page
 
 
 class ProposedAction(BaseModel):
@@ -31,12 +32,14 @@ class ProposedAction(BaseModel):
     ref: str | None = Field(None, description="data-aiop-ref of the target element (click/fill/select)")
     url: str | None = Field(None, description="absolute or site-relative URL (goto)")
     value: str | None = Field(None, description="text to type (fill), option label (select) or fact to remember (note)")
+    fields: dict[str, str] | None = Field(None, description="submit_form: field name or label -> value")
+    button: str | None = Field(None, description="submit_form: text of the submit button (optional if only one)")
     reason: str = Field("", description="one line: why this step, or the summary when tool=done")
 
     @model_validator(mode="after")
     def _needs_args(self) -> ProposedAction:
         need = {"goto": ["url"], "click": ["ref"], "fill": ["ref", "value"], "select": ["ref", "value"],
-                "note": ["value"]}
+                "note": ["value"], "submit_form": ["url", "fields"]}
         missing = [f for f in need.get(self.tool, []) if getattr(self, f) is None]
         if missing:
             raise ValueError(f"{self.tool} needs {', '.join(missing)}")
@@ -44,7 +47,8 @@ class ProposedAction(BaseModel):
 
     def key(self) -> str:
         """Stable identity used by the loop guard."""
-        return f"{self.tool}|{self.ref}|{self.url}|{self.value}"
+        fields = ",".join(f"{k}={v}" for k, v in sorted((self.fields or {}).items()))
+        return f"{self.tool}|{self.ref}|{self.url}|{self.value}|{fields}|{self.button}"
 
 
 class ActionBatch(BaseModel):

@@ -22,13 +22,13 @@ def book(slot: str, cid: str) -> list:
 
 
 def screening() -> list:
-    """The SOP outcome: 3 shortlisted and booked by experience, 3 not a fit."""
+    """The SOP outcome for the current data (R-21): 4 shortlisted and booked by experience, 4 not a fit."""
     steps = []
-    for cid in ["A-101", "A-103", "A-105"]:
+    for cid in ["A-201", "A-203", "A-206", "A-207"]:
         steps += set_status(cid, "Shortlisted", "meets all must-haves")
-    for cid in ["A-102", "A-104", "A-106"]:
+    for cid in ["A-202", "A-204", "A-205", "A-208"]:
         steps += set_status(cid, "Not a fit (pending approval)", "missing must-haves")
-    steps += book("S-1", "A-105") + book("S-3", "A-103") + book("S-4", "A-101")
+    steps += book("S-11", "A-206") + book("S-13", "A-201") + book("S-16", "A-203") + book("S-17", "A-207")
     return steps
 
 
@@ -37,4 +37,4 @@ DONE = A(tool="done", reason="all applicants screened and interviews booked")
 
 def demo() -> list:
     """Console demo: the correct screening, then one rejection that needs a human."""
-    return screening() + set_status("A-106", "Rejected", "no industry experience; recruiter to confirm") + [DONE]
+    return screening() + set_status("A-208", "Rejected", "1 year only; recruiter to confirm") + [DONE]

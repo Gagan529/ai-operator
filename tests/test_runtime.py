@@ -241,3 +241,19 @@ def test_fill_on_a_dropdown_gets_a_clear_hint(make_runtime):
     rt.step(st)
     rt.step(st)
     assert "is a dropdown: use the select tool" in st.feedback
+
+
+def test_current_company_data_is_consistent(make_runtime, company):
+    """The company's live dataset (not the v1 fixture): its scripted correct run must verify."""
+    from aiop.company import COMPANIES
+    original = recruiting.SEED
+    recruiting.SEED = COMPANIES / "acme_talent" / "seed.json"
+    try:
+        recruiting.reset()
+        script = company.module("scripted")
+        rt, st = make_runtime(script.screening() + [script.DONE])
+        rt.run_until_blocked(rt.start(st))
+        assert st.status == RunStatus.VERIFIED, st.stop_reason
+    finally:
+        recruiting.SEED = original
+        recruiting.reset()

@@ -10,6 +10,9 @@ effects:
   reject_candidate:
     decision: APPROVAL_REQUIRED
     reason: "POLICY-1: only a human recruiter may reject a candidate"
+  set_interview_status:
+    decision: DENY
+    reason: "interviews are scheduled only through the calendar; booking a slot sets this status by itself"
 
 # For pages that carry no data-aiop-effect: match the submitted form instead.
 fallback_rules:

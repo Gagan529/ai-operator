@@ -12,5 +12,5 @@ demo:                         # local demo wiring for the console
   mock_app: mockapps.recruiting:app
   reset: /admin/reset         # machine endpoint; the operator itself is denied it (policies.yaml)
 default_task: >
-  Screen every applicant for role R-12 (Backend Engineer) following the SOP,
+  Screen every applicant for role R-21 (Data Engineer) following the SOP,
   then book interviews for the shortlisted candidates.

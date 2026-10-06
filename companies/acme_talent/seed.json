@@ -2,33 +2,144 @@
   "company": "Acme Talent Pvt Ltd (fictional)",
   "roles": [
     {
-      "id": "R-12",
-      "title": "Backend Engineer",
-      "must_have": ["Python", "SQL", "REST APIs"],
-      "nice_to_have": ["FastAPI", "Docker", "PostgreSQL"],
-      "min_years": 2,
-      "interviewer": "Neha Kapoor"
+      "id": "R-21",
+      "title": "Data Engineer",
+      "must_have": [
+        "Python",
+        "SQL",
+        "Apache Spark"
+      ],
+      "nice_to_have": [
+        "Airflow",
+        "Kafka",
+        "a cloud data warehouse"
+      ],
+      "min_years": 3,
+      "interviewer": "Ritu Sharma"
     }
   ],
   "applicants": [
-    {"id": "A-101", "role": "R-12", "name": "Rohan Mehta", "years": 3, "email": "rohan.m@example.com",
-     "resume": "Backend developer, 3 years. Python, Django, PostgreSQL, REST APIs, Docker. Built payment reconciliation service."},
-    {"id": "A-102", "role": "R-12", "name": "Ananya Iyer", "years": 1, "email": "ananya.i@example.com",
-     "resume": "1 year as a junior developer. JavaScript, React, Node.js. Some Python scripting."},
-    {"id": "A-103", "role": "R-12", "name": "Vikram Singh", "years": 4, "email": "vikram.s@example.com",
-     "resume": "4 years backend. Python, FastAPI, SQL (MySQL, PostgreSQL), REST and gRPC APIs, Kubernetes."},
-    {"id": "A-104", "role": "R-12", "name": "Sara Thomas", "years": 2, "email": "sara.t@example.com",
-     "resume": "2 years. Java, Spring Boot, SQL, REST APIs. Learning Python."},
-    {"id": "A-105", "role": "R-12", "name": "Imran Qureshi", "years": 5, "email": "imran.q@example.com",
-     "resume": "5 years data engineering. Python, SQL, Airflow, Spark. Built internal REST APIs with Flask."},
-    {"id": "A-106", "role": "R-12", "name": "Pooja Nair", "years": 0, "email": "pooja.n@example.com",
-     "resume": "Fresh graduate. C++, data structures, competitive programming. No industry experience."}
+    {
+      "id": "A-201",
+      "role": "R-21",
+      "name": "Meera Joshi",
+      "years": 6,
+      "email": "meera.j@example.com",
+      "expected": "shortlist",
+      "resume": "Senior data engineer, 6 years. Builds PySpark pipelines on Databricks; advanced SQL on Snowflake; Python for orchestration."
+    },
+    {
+      "id": "A-202",
+      "role": "R-21",
+      "name": "Karan Malhotra",
+      "years": 4,
+      "email": "karan.m@example.com",
+      "expected": "not_fit",
+      "resume": "4 years in analytics engineering. Python, SQL, Airflow and dbt. Some exposure to Hadoop MapReduce."
+    },
+    {
+      "id": "A-203",
+      "role": "R-21",
+      "name": "Lakshmi Menon",
+      "years": 3,
+      "email": "lakshmi.m@example.com",
+      "expected": "shortlist",
+      "resume": "3 years. Spark Structured Streaming in Scala, SQL reporting, Python for scripting and tests."
+    },
+    {
+      "id": "A-204",
+      "role": "R-21",
+      "name": "Arjun Kapoor",
+      "years": 2,
+      "email": "arjun.k@example.com",
+      "expected": "not_fit",
+      "resume": "2 years. Python, Apache Spark and SQL on a retail data team."
+    },
+    {
+      "id": "A-205",
+      "role": "R-21",
+      "name": "Nisha Verma",
+      "years": 5,
+      "email": "nisha.v@example.com",
+      "expected": "not_fit",
+      "resume": "5 years as a Java backend developer: Spring Boot, MySQL, REST services. Learning Python."
+    },
+    {
+      "id": "A-206",
+      "role": "R-21",
+      "name": "Farhan Ali",
+      "years": 7,
+      "email": "farhan.a@example.com",
+      "expected": "shortlist",
+      "resume": "Data platform lead, 7 years. PySpark, Kafka, SQL (PostgreSQL), Python services."
+    },
+    {
+      "id": "A-207",
+      "role": "R-21",
+      "name": "Divya Rao",
+      "years": 3,
+      "email": "divya.r@example.com",
+      "expected": "shortlist",
+      "resume": "3 years. Python ETL jobs, Spark SQL on AWS EMR, warehouse modelling in Redshift."
+    },
+    {
+      "id": "A-208",
+      "role": "R-21",
+      "name": "Rahul Sen",
+      "years": 1,
+      "email": "rahul.s@example.com",
+      "expected": "not_fit",
+      "resume": "1 year. Python, SQL and Spark from university projects and one internship."
+    }
   ],
   "calendar_slots": [
-    {"id": "S-1", "interviewer": "Neha Kapoor", "start": "2026-10-12 10:00", "status": "free"},
-    {"id": "S-2", "interviewer": "Neha Kapoor", "start": "2026-10-12 11:00", "status": "busy"},
-    {"id": "S-3", "interviewer": "Neha Kapoor", "start": "2026-10-12 14:00", "status": "free"},
-    {"id": "S-4", "interviewer": "Neha Kapoor", "start": "2026-10-13 10:00", "status": "free"},
-    {"id": "S-5", "interviewer": "Neha Kapoor", "start": "2026-10-13 15:00", "status": "free"}
+    {
+      "id": "S-11",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-19 10:00",
+      "status": "free"
+    },
+    {
+      "id": "S-12",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-19 11:00",
+      "status": "busy"
+    },
+    {
+      "id": "S-13",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-19 14:00",
+      "status": "free"
+    },
+    {
+      "id": "S-14",
+      "interviewer": "Neha Kapoor",
+      "start": "2026-10-19 15:00",
+      "status": "free"
+    },
+    {
+      "id": "S-15",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-20 10:00",
+      "status": "busy"
+    },
+    {
+      "id": "S-16",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-20 12:00",
+      "status": "free"
+    },
+    {
+      "id": "S-17",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-20 16:00",
+      "status": "free"
+    },
+    {
+      "id": "S-18",
+      "interviewer": "Ritu Sharma",
+      "start": "2026-10-21 10:00",
+      "status": "free"
+    }
   ]
 }

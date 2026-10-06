@@ -1,9 +1,11 @@
 # Acme Talent: Recruiting SOP (fictional company)
 
 ## Where things are
-- **Job board:** every application with the applicant's resume and years of experience.
-- **ATS:** roles (requirements, interviewer) and each candidate's status; statuses are changed here.
-- **Calendar:** the interviewers' slots; interviews are booked here.
+- **Job board** (`/jobs`): every application with the applicant's resume and years of experience.
+- **ATS** (`/ats`): the list of roles and of all candidates. A role's requirements and interviewer: `/ats/role/<role id>`.
+  Each candidate has a page `/ats/candidate/<candidate id>` with the form (status, note, Save) where statuses are changed.
+- **Calendar** (`/calendar`): the interviewers' slots, and the booking form (slot id, candidate id, Book). Booking a slot sets the candidate's ATS status to
+  "Interview Scheduled" by itself: never set that status by hand.
 
 ## Screening a role
 1. Read the role's must-have skills and minimum years in the ATS role page.

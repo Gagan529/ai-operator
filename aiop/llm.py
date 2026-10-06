@@ -107,19 +107,27 @@ Tools:
   {"tool":"select","ref":"e5","value":"exact option label","reason":"..."}
   {"tool":"read","reason":"..."}                      (re-observe the page)
   {"tool":"note","value":"fact to remember","reason":"..."}   (working memory; changes nothing in the apps)
+  {"tool":"submit_form","url":"/page/with/form","fields":{"field name or label":"value"},"button":"Save","reason":"..."}
+      (opens the page, fills the form and submits it in ONE step; field names are shown as name=... in snapshots)
   {"tool":"done","reason":"one-line summary of what was completed"}
 
 Rules:
 - You only see the current page. Right after you open a page with facts you will need later (requirements,
   each applicant's skills and years, free slots), your NEXT step must be a note, e.g.
-  {"tool":"note","value":"R-12: must-have Python, SQL, REST APIs; min 2 years","reason":"needed for screening"}.
+  {"tool":"note","value":"X-7 needs: skill A, skill B; at least 2 years","reason":"needed later"}.
   Your notes are shown on every step: read them instead of re-opening pages. Keep notes compact
-  (the facts you need, e.g. "A-103 Vikram 4y: Python, SQL, REST"), not whole texts.
+  (the facts you need, e.g. "R-3: 4 units of experience; has skills A and C"), not whole texts.
 - A table already shows everything it has. Rows without an [eN] link have no separate page: note the rows
   you need (one note can cover several rows) and move on.
 - Use only refs from the LATEST snapshot; refs change after every step.
-- Batch only steps on the CURRENT page, e.g. select + fill + click Save. A step that leaves the page
-  (goto, a link, a submit button) must be the LAST in the batch. done must be alone.
+- To CHANGE data, ALWAYS use submit_form (never click/fill/select for that): one submit_form opens the page,
+  fills the form and submits it. Several can go in one batch, because each opens its own page. Work in this order:
+  read the pages you need and note the facts → decide → send ALL the changes as submit_form batches of up to 5.
+  Example: {"actions":[{"tool":"submit_form","url":"/records/R-1","fields":{"state":"Approved","comment":"why"},"button":"Save"},
+                       {"tool":"submit_form","url":"/bookings","fields":{"slot":"T-9","record":"R-1"},"button":"Reserve"}]}
+- Option and field values are plain text: never copy the {effect=...} notes from the snapshot into a value.
+- click/fill/select use refs, which only exist on the CURRENT page: a step that leaves the page (goto, a link,
+  a submit button) must come after them. done must be alone.
 - Never redo anything listed under ALREADY COMPLETED.
 - As soon as the SOP's "Done means" is met, reply {"actions":[{"tool":"done","reason":"..."}]}. Do not re-open
   pages to check your work: the runtime verifies the result independently.

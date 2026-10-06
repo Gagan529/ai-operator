@@ -1,5 +1,6 @@
 """Shared fixtures: the mock company served in-process, one real headless browser."""
 import threading
+from pathlib import Path
 import time
 
 import pytest
@@ -14,6 +15,11 @@ from mockapps import recruiting
 
 PORT = 8011
 BASE = f"http://127.0.0.1:{PORT}"
+
+
+V1 = Path(__file__).parent / "fixtures" / "acme_seed_v1.json"
+recruiting.SEED = V1                       # tests run on a frozen dataset, not the company's current one
+recruiting.INJECTED_ID = "A-106"
 
 
 @pytest.fixture(scope="session")

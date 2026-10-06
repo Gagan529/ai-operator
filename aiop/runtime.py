@@ -18,7 +18,7 @@ from aiop.browser import Browser, BrowserError
 from aiop.company import Company
 from aiop.evidence import EvidenceStore
 from aiop.llm import ActionProposer, Context, ProposalError
-from aiop.models import (Decision, Failure, FailureKind, ObservationSummary, Observation, Outcome,
+from aiop.models import (REF_TOOLS, Decision, Failure, FailureKind, ObservationSummary, Observation, Outcome,
                          PendingApproval, PolicyDecision, ProposedAction, RunState, RunStatus, Target,
                          ToolResult, VerificationResult)
 from aiop.policy import PolicyEngine
@@ -99,6 +99,17 @@ class Runtime:
                 f"{b.cycle_window} steps. Use note to save what you need from a page, then move on")))
 
         target: Target | None = None
+        if action.tool == "submit_form":
+            # judge the page first, then turn the form into a click on its REAL submit button
+            nav = self.policy.decide(ProposedAction(tool="goto", url=action.url))
+            if nav.decision == Decision.DENY:
+                return self._failed(state, Failure(kind=FailureKind.POLICY_VIOLATION,
+                                                   message=f"denied by {nav.rule}: {nav.reason}"))
+            try:
+                ref = self.browser.prepare_form(action.url or "/", action.fields or {}, action.button)
+            except BrowserError as e:
+                return self._failed(state, classify_exception(e))
+            action = ProposedAction(tool="click", ref=ref, reason=action.reason or f"submit form on {action.url}")
         if action.tool == "click":
             try:
                 target = self.browser.resolve(action.ref or "")
@@ -117,8 +128,12 @@ class Runtime:
         before = state.last_observation.url if state.last_observation else ""
         ok = self._execute(state, action, target, effect=decision.effect)
         after = state.last_observation.url if state.last_observation else ""
-        if not ok or after != before or action.tool == "goto":
-            state.queue = []                 # refs in the rest of the batch belong to the old page
+        if not ok:
+            state.queue = []
+        elif after != before or action.tool == "goto":
+            # refs belong to the old page: keep only the page-independent actions before the first ref-based one
+            cut = next((i for i, a in enumerate(state.queue) if a.tool in REF_TOOLS), len(state.queue))
+            state.queue = state.queue[:cut]
         return state
 
     def _propose(self, state: RunState) -> list[ProposedAction]:

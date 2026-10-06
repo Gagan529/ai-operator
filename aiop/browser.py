@@ -9,6 +9,7 @@ values (e1, e2, ...), so a ref is only valid against the latest snapshot.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -52,6 +53,7 @@ _SNAPSHOT_JS = r"""
           .filter(c => c.nodeType === 3).map(c => c.textContent).join(' ') : '') ||
       el.getAttribute('placeholder') || el.name || el.id);
   const eff = el => el.dataset.aiopEffect ? ` effect=${el.dataset.aiopEffect}` : '';
+  const nm = el => el.name ? ` name=${el.name}` : '';
   const describe = el => {
     const r = tag(el), t = el.tagName;
     if (t === 'A') return `[${r}] link "${cut(clean(el.innerText), 80)}" -> ${el.getAttribute('href')}${eff(el)}`;
@@ -62,11 +64,11 @@ _SNAPSHOT_JS = r"""
     if (t === 'SELECT') {
       const opts = Array.from(el.options).map(o => clean(o.text) + (o.dataset.aiopEffect ? ` {effect=${o.dataset.aiopEffect}}` : ''));
       const cur = el.selectedOptions[0] ? clean(el.selectedOptions[0].text) : '';
-      return `[${r}] select "${labelOf(el)}" value="${cur}" options: ${opts.join(' | ')}${eff(el)}`;
+      return `[${r}] select "${labelOf(el)}"${nm(el)} value="${cur}" options: ${opts.join(' | ')}${eff(el)}`;
     }
     if (el.type === 'checkbox' || el.type === 'radio')
       return `[${r}] ${el.type} "${labelOf(el)}" checked=${el.checked}${eff(el)}`;
-    return `[${r}] textbox "${labelOf(el)}" value="${cut(el.value || '', 120)}"${eff(el)}`;
+    return `[${r}] textbox "${labelOf(el)}"${nm(el)} value="${cut(el.value || '', 120)}"${eff(el)}`;
   };
   const lines = [], done = new Set();
   for (const el of document.body.querySelectorAll('*')) {
@@ -94,6 +96,36 @@ _SNAPSHOT_JS = r"""
   }
   const err = document.querySelector('[role=alert], #error, .error');
   return { title: document.title, lines, error: err ? clean(err.innerText) : null };
+}
+"""
+
+# Finds the form holding all the given fields (by name or label) and marks its submit button.
+_FORM_JS = r"""
+([keys, button]) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const labelText = e => e.labels && e.labels[0] ? Array.from(e.labels[0].childNodes)
+      .filter(c => c.nodeType === 3).map(c => c.textContent).join(' ') : '';
+  document.querySelectorAll('[data-aiop-submit-target]').forEach(e => e.removeAttribute('data-aiop-submit-target'));
+  const forms = Array.from(document.forms);
+  for (let i = 0; i < forms.length; i++) {
+    const els = Array.from(forms[i].elements).filter(e => e.name);
+    const map = {};
+    let ok = true;
+    for (const k of keys) {
+      const el = els.find(e => norm(e.name) === norm(k)) || els.find(e => norm(labelText(e)) === norm(k));
+      if (!el) { ok = false; break; }
+      map[k] = {name: el.name, tag: el.tagName.toLowerCase()};
+    }
+    if (!ok) continue;
+    const submits = Array.from(forms[i].querySelectorAll('button, input[type=submit]'))
+      .filter(b => b.tagName === 'INPUT' || (b.getAttribute('type') || 'submit') === 'submit');
+    const pick = button ? submits.filter(b => norm(b.innerText || b.value).includes(norm(button))) : submits;
+    if (pick.length === 0) return {error: `the form has no submit button "${button}"`};
+    if (!button && pick.length > 1) return {error: 'the form has several submit buttons: name one with "button"'};
+    pick[0].setAttribute('data-aiop-submit-target', '1');
+    return {index: i, map};
+  }
+  return {error: 'no form on this page has all of these fields: ' + keys.join(', ')};
 }
 """
 
@@ -130,6 +162,17 @@ _RESOLVE_JS = r"""
   return out;
 }
 """
+
+
+def _option_label(loc, value: str, name: str) -> str:
+    """The exact option label to select. Models sometimes copy the snapshot's '{effect=...}' note into the
+    value: strip it. An option that does not exist fails at once with the real list (no 8 s timeout)."""
+    wanted = re.sub(r"\s*\{effect=[^}]*\}\s*$", "", value).strip()
+    options = [o.strip() for o in loc.evaluate("e => Array.from(e.options).map(o => o.text)")]
+    for o in options:
+        if o.lower() == wanted.lower():
+            return o
+    raise ActionFailed(f"{name} has no option {value!r}; options are: {' | '.join(options)}")
 
 
 class Browser:
@@ -208,7 +251,8 @@ class Browser:
         loc = self._locate(ref)
         if self._tag(loc) != "select":
             raise ActionFailed(f"{ref} is not a dropdown: use fill for text boxes, click for buttons and links")
-        return self._act(lambda: loc.select_option(label=value))
+        label = _option_label(loc, value, ref)
+        return self._act(lambda: loc.select_option(label=label))
 
     def read(self) -> ToolResult:
         return ToolResult(ok=True, observation=self.snapshot())
@@ -220,6 +264,37 @@ class Browser:
         if info is None:
             raise MissingElement(f"no element with ref {ref} on {self.page.url}")
         return Target(**info)
+
+    def prepare_form(self, url: str, fields: dict[str, str], button: str | None) -> str:
+        """For submit_form: open the page, find the form holding these fields (by name or label), fill it,
+        and return the fresh ref of its submit button. The runtime then judges that real button with
+        the policy before anything is submitted."""
+        r = self.goto(url)
+        if not r.ok or (r.observation.http_status or 200) >= 400:
+            raise ActionFailed(f"could not open {url}: {r.error or r.observation.error_text or r.observation.http_status}")
+        info = self.page.evaluate(_FORM_JS, [list(fields), button])
+        if "error" in info:
+            raise MissingElement(f"{info['error']} (on {self.page.url})")
+        form = self.page.locator("form").nth(info["index"])
+        for key, value in fields.items():
+            m = info["map"][key]
+            field = form.locator(f'[name="{m["name"]}"]').first
+            try:
+                if m["tag"] == "select":
+                    field.select_option(label=_option_label(field, value, key))
+                else:
+                    field.fill(value)
+            except PWError as e:
+                raise ActionFailed(f"field '{key}' could not take {value!r}: {str(e).splitlines()[0]}") from e
+            # (an unknown dropdown option raises ActionFailed with the real options, above)
+        self.snapshot()  # re-tag, so the submit button gets a fresh ref
+        submit = self.page.locator("[data-aiop-submit-target]").first
+        ref = submit.get_attribute("data-aiop-ref")
+        self.page.evaluate("() => document.querySelectorAll('[data-aiop-submit-target]')"
+                           ".forEach(e => e.removeAttribute('data-aiop-submit-target'))")
+        if ref is None:
+            raise MissingElement("the submit button is not visible")
+        return ref
 
     def refill(self, target: Target) -> str:
         """Re-open the form behind `target`, restore its field values by name, and return
