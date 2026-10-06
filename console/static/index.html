@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-operator console</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #6a7385; --line: #e2e5ea;
+    --accent: #2f5bd3; --ok: #1f8a4c; --ok-bg: #e5f5ec; --warn: #a86400; --warn-bg: #fff3dc;
+    --bad: #b8322a; --bad-bg: #fde8e6; --info: #2f5bd3; --info-bg: #e8eefc; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1a1e26; --text: #e4e7ed; --muted: #949cad; --line: #2b313c;
+      --accent: #7c9dff; --ok: #5fd08f; --ok-bg: #173225; --warn: #f0b24f; --warn-bg: #3a2b12;
+      --bad: #ff7b72; --bad-bg: #3d1d1b; --info: #7c9dff; --info-bg: #1d2742; --code: #222733;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header p { margin: 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; font-size: 13px; }
+  select, textarea, input[type=text] { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  textarea { min-height: 70px; resize: vertical; }
+  .checks label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .primary { background: var(--accent); color: #fff; width: 100%; margin-top: 12px; }
+  .approve { background: var(--ok); color: #fff; }
+  .deny { background: var(--bad); color: #fff; }
+  details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+  pre { background: var(--code); padding: 8px; border-radius: 6px; overflow: auto; max-height: 260px; font-size: 12px; white-space: pre-wrap; }
+  .status { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--code); color: var(--muted); white-space: nowrap; }
+  .b-ok { background: var(--ok-bg); color: var(--ok); } .b-warn { background: var(--warn-bg); color: var(--warn); }
+  .b-bad { background: var(--bad-bg); color: var(--bad); } .b-info { background: var(--info-bg); color: var(--info); }
+  .big { font-size: 15px; padding: 4px 12px; }
+  .muted { color: var(--muted); }
+  ol { margin: 0; padding-left: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  #stream { max-height: 520px; overflow: auto; }
+  #stream td:first-child { color: var(--muted); width: 40px; }
+  #stream td:nth-child(2) { width: 150px; }
+  .approval { border: 2px solid var(--warn); }
+  .approval .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .approval img { max-width: 360px; width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  .actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .banner { font-size: 16px; font-weight: 700; padding: 12px 14px; border-radius: 8px; }
+  .hidden { display: none; }
+  a { color: var(--accent); }
+  code { background: var(--code); padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ai-operator console</h1>
+  <p>The LLM proposes; the runtime decides. Success is what the verifier finds in the company's systems.</p>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>New run</h2>
+      <label for="company">Company</label>
+      <select id="company"></select>
+      <label for="task">Request</label>
+      <textarea id="task"></textarea>
+      <label for="proposer">Who proposes the steps</label>
+      <select id="proposer">
+        <option value="live">Live LLM (from .env)</option>
+        <option value="scripted">Scripted replay (no LLM, offline demo)</option>
+      </select>
+      <label>Fault switches (break the company app on purpose)</label>
+      <div class="checks">
+        <label><input type="checkbox" id="flaky"> FLAKY: first booking returns HTTP 503</label>
+        <label><input type="checkbox" id="silent_fail"> SILENT_FAIL: page says "Booked", nothing saved</label>
+        <label><input type="checkbox" id="injection"> INJECTION: a resume carries planted instructions</label>
+        <label><input type="checkbox" id="headed"> Show the browser window</label>
+      </div>
+      <button class="primary" id="run">Run</button>
+      <p class="muted" id="runmsg"></p>
+    </section>
+    <section>
+      <h2>Company context</h2>
+      <details><summary>SOP</summary><pre id="sop"></pre></details>
+      <details><summary>Policies (deterministic)</summary><pre id="policies"></pre></details>
+      <details><summary>Verification checks</summary><ol id="checklist"></ol></details>
+    </section>
+  </div>
+
+  <div>
+    <section>
+      <div class="status">
+        <span id="statusBadge" class="badge big">no run yet</span>
+        <span class="muted">Run <b id="runId">-</b></span>
+        <span class="muted">Step <b id="step">0</b></span>
+        <span class="muted">Retries <b id="recoveries">0</b> · Re-plans <b id="replans">0</b></span>
+        <span class="muted">Tokens <b id="tokens">0 / 0</b></span>
+      </div>
+      <div id="error" class="banner b-bad hidden" style="margin-top:10px"></div>
+      <div id="final" class="banner hidden" style="margin-top:10px"></div>
+    </section>
+
+    <section id="approval" class="approval hidden">
+      <h2>Human approval needed</h2>
+      <div class="row">
+        <div style="flex:1;min-width:240px">
+          <p><span class="badge b-warn" id="apEffect"></span></p>
+          <p id="apReason"></p>
+          <p class="muted">Rule: <code id="apRule"></code></p>
+          <p class="muted">Agent's step: <span id="apAction"></span></p>
+          <table id="apFields"></table>
+          <label for="apNote">Note (optional)</label>
+          <input type="text" id="apNote" placeholder="why">
+          <div class="actions">
+            <button class="approve" id="approveBtn">Approve</button>
+            <button class="deny" id="denyBtn">Deny</button>
+          </div>
+        </div>
+        <a id="apShotLink" target="_blank"><img id="apShot" alt="page at the moment of the request"></a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Plan</h2>
+      <ol id="plan"><li class="muted">appears when a run starts</li></ol>
+    </section>
+
+    <section>
+      <h2 style="display:flex;justify-content:space-between;align-items:center">Action stream
+        <label style="margin:0;font-weight:400;text-transform:none;letter-spacing:0"><input type="checkbox" id="showObs"> show page observations</label></h2>
+      <div id="stream"><table><thead><tr><th>Step</th><th>Event</th><th>What happened</th></tr></thead><tbody id="events"></tbody></table></div>
+    </section>
+
+    <section>
+      <h2>Verification (independent of the agent)</h2>
+      <table><thead><tr><th></th><th>Check</th><th>Expected</th><th>Found in the DB</th></tr></thead><tbody id="verify"><tr><td colspan="4" class="muted">runs when the agent says it is done</td></tr></tbody></table>
+    </section>
+
+    <section>
+      <h2>Evidence</h2>
+      <p id="evidence" class="muted">appears when the run ends</p>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let companies = [], runId = null, seen = 0, timer = null, allEvents = [];
+
+const KIND = {
+  policy: e => e.summary.startsWith("ALLOW") ? "b-ok" : e.summary.startsWith("DENY") ? "b-bad" : "b-warn",
+  approval_request: () => "b-warn", approval: e => e.summary.startsWith("APPROVED") ? "b-ok" : "b-bad",
+  failure: () => "b-bad", recover: () => "b-info", verify: e => e.summary.includes("PASS") ? "b-ok" : "b-bad",
+  end: e => e.summary.startsWith("VERIFIED") ? "b-ok" : "b-bad", stop: () => "b-bad",
+};
+
+async function loadCompanies() {
+  companies = await (await fetch("/api/companies")).json();
+  $("company").innerHTML = companies.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  showCompany();
+}
+function showCompany() {
+  const c = companies.find(x => x.id === $("company").value);
+  if (!c) return;
+  $("task").value = c.task; $("sop").textContent = c.sop; $("policies").textContent = c.policies;
+  $("checklist").innerHTML = c.checks.map(n => `<li>${esc(n)}</li>`).join("");
+  [...$("proposer").options].find(o => o.value === "scripted").disabled = !c.scripted;
+}
+$("company").onchange = showCompany;
+
+$("run").onclick = async () => {
+  const body = { company: $("company").value, task: $("task").value, proposer: $("proposer").value,
+    flaky: $("flaky").checked, silent_fail: $("silent_fail").checked, injection: $("injection").checked,
+    headed: $("headed").checked };
+  const r = await fetch("/api/runs", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
+  if (!r.ok) { $("runmsg").textContent = await errorText(r); return; }
+  runId = (await r.json()).run_id; seen = 0; allEvents = [];
+  $("runmsg").textContent = ""; $("events").innerHTML = ""; $("runId").textContent = runId;
+  $("statusBadge").className = "badge big b-info"; $("statusBadge").textContent = "STARTING";
+  ["step", "recoveries", "replans"].forEach(id => $(id).textContent = "0"); $("tokens").textContent = "0 / 0";
+  $("approval").classList.add("hidden");
+  $("plan").innerHTML = ""; $("final").classList.add("hidden"); $("error").classList.add("hidden");
+  $("verify").innerHTML = `<tr><td colspan="4" class="muted">runs when the agent says it is done</td></tr>`;
+  $("evidence").textContent = "appears when the run ends";
+  clearInterval(timer); timer = setInterval(poll, 600); poll();
+};
+
+async function errorText(r) {
+  const t = await r.text();
+  try { return JSON.parse(t).detail; } catch { return `${r.status}: ${t.slice(0, 200)}`; }
+}
+function renderEvent(e) {
+  if (e.kind === "observe" && !$("showObs").checked) return "";
+  const cls = (KIND[e.kind] || (() => ""))(e);
+  const link = e.artifact ? ` <a href="/runs/${runId}/${esc(e.artifact)}" target="_blank">view</a>` : "";
+  return `<tr><td>${e.step}</td><td><span class="badge ${cls}">${esc(e.kind)}</span></td><td>${esc(e.summary)}${link}</td></tr>`;
+}
+$("showObs").onchange = () => { $("events").innerHTML = allEvents.map(renderEvent).join(""); };
+
+async function poll() {
+  if (!runId) return;
+  const resp = await fetch(`/api/runs/${runId}?since=${seen}`);
+  if (!resp.ok) { $("error").textContent = await errorText(resp); $("error").classList.remove("hidden"); return; }
+  const v = await resp.json();
+  if (v.events.length) {
+    allEvents.push(...v.events); seen = v.total_events;
+    $("events").insertAdjacentHTML("beforeend", v.events.map(renderEvent).join(""));
+    $("stream").scrollTop = $("stream").scrollHeight;
+  }
+  if (v.error) {
+    $("error").textContent = "Run error: " + v.error; $("error").classList.remove("hidden");
+    if (!v.busy) { clearInterval(timer); $("statusBadge").className = "badge big b-bad"; $("statusBadge").textContent = "ERROR"; }
+  }
+  const s = v.state;
+  if (s) {
+    const cls = {RUNNING: "b-info", AWAITING_APPROVAL: "b-warn", VERIFIED: "b-ok", FAILED: "b-bad", STOPPED: "b-bad"}[s.status];
+    $("statusBadge").className = `badge big ${cls}`; $("statusBadge").textContent = s.status.replace("_", " ");
+    $("step").textContent = s.step; $("recoveries").textContent = s.recoveries; $("replans").textContent = s.replans;
+    $("tokens").textContent = `${s.tokens_in} / ${s.tokens_out}`;
+    if (s.plan.length) $("plan").innerHTML = s.plan.map(p => `<li>${esc(p)}</li>`).join("");
+  }
+  showApproval(v.interrupt);
+  if (v.verification) {
+    $("verify").innerHTML = v.verification.checks.map(c => `<tr><td>${c.passed ? "✅" : (c.critical ? "❌" : "⚠️")}</td>
+      <td>${esc(c.name)}</td><td>${esc(c.expected)}</td><td>${esc(c.actual)}</td></tr>`).join("");
+  }
+  if (v.finished && !v.busy) {
+    clearInterval(timer);
+    const ok = s.status === "VERIFIED";
+    $("final").className = `banner ${ok ? "b-ok" : "b-bad"}`;
+    $("final").textContent = `FINAL RESULT: ${s.status}. ${s.stop_reason || ""}`;
+    $("evidence").innerHTML = `<a href="${v.report}" target="_blank">report.html</a> ·
+      <a href="/runs/${runId}/timeline.jsonl" target="_blank">timeline</a> ·
+      <a href="/runs/${runId}/db_diff.json" target="_blank">database changes</a> ·
+      <a href="/runs/${runId}/db_before.json" target="_blank">DB before</a> ·
+      <a href="/runs/${runId}/db_after.json" target="_blank">DB after</a> ·
+      <a href="/runs/${runId}/screenshots/final.png" target="_blank">final screenshot</a>`;
+  }
+}
+
+function showApproval(ap) {
+  if (!ap) { $("approval").classList.add("hidden"); return; }
+  $("approval").classList.remove("hidden");
+  $("apEffect").textContent = ap.effect || "unknown effect";
+  $("apReason").textContent = ap.reason; $("apRule").textContent = ap.rule; $("apAction").textContent = ap.action;
+  $("apFields").innerHTML = Object.entries(ap.fields || {}).map(([k, val]) => `<tr><th>${esc(k)}</th><td>${esc(val)}</td></tr>`).join("");
+  const req = [...allEvents].reverse().find(e => e.kind === "approval_request");
+  if (req && req.artifact) { $("apShot").src = `/runs/${runId}/${req.artifact}`; $("apShotLink").href = $("apShot").src; }
+}
+async function answer(approved) {
+  $("approveBtn").disabled = $("denyBtn").disabled = true;
+  const r = await fetch(`/api/runs/${runId}/answer`, { method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ approved, note: $("apNote").value }) });
+  if (!r.ok) { $("error").textContent = await errorText(r); $("error").classList.remove("hidden"); }
+  $("apNote").value = ""; $("approval").classList.add("hidden");
+  $("approveBtn").disabled = $("denyBtn").disabled = false;
+  clearInterval(timer); timer = setInterval(poll, 600);
+}
+$("approveBtn").onclick = () => answer(true);
+$("denyBtn").onclick = () => answer(false);
+loadCompanies();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Deterministic policy for Acme Talent. The runtime works out the effect of an
+# action from the page itself (data-aiop-effect, or the fallback rules below),
+# never from what the LLM says it is doing.
+# Decisions: ALLOW | APPROVAL_REQUIRED | DENY
+
+effects:
+  shortlist_candidate: ALLOW
+  mark_not_a_fit: ALLOW
+  book_interview: ALLOW
+  reject_candidate:
+    decision: APPROVAL_REQUIRED
+    reason: "POLICY-1: only a human recruiter may reject a candidate"
+
+# For pages that carry no data-aiop-effect: match the submitted form instead.
+fallback_rules:
+  - name: ats-status-rejected
+    method: post
+    action: /ats/candidate/*
+    fields: {status: Rejected}
+    effect: reject_candidate
+  - name: ats-status-shortlisted
+    method: post
+    action: /ats/candidate/*
+    fields: {status: Shortlisted}
+    effect: shortlist_candidate
+  - name: ats-status-not-a-fit
+    method: post
+    action: /ats/candidate/*
+    fields: {status: "Not a fit (pending approval)"}
+    effect: mark_not_a_fit
+  - name: calendar-book
+    method: post
+    action: /calendar/book
+    effect: book_interview
+
+# Pages the operator must never open (machine endpoints).
+deny_paths:
+  - /admin/*
+
+defaults:
+  unknown_effect: APPROVAL_REQUIRED   # an effect this file does not list
+  unknown_submit: APPROVAL_REQUIRED   # a form submit whose effect cannot be determined

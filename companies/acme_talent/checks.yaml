@@ -1,0 +1,53 @@
+# Independent post-conditions, run against the app's database after the agent says
+# it is done. Each query returns one value; it must equal `expect`.
+# `expect` may name a run fact, e.g. $approved.reject_candidate = how many
+# reject_candidate actions a human approved in this run.
+# critical: false checks only downgrade PASS to PARTIAL.
+
+checks:
+  - name: every applicant screened
+    sql: SELECT count(*) FROM candidates WHERE role = 'R-12' AND status = 'Applied'
+    expect: 0
+
+  - name: qualified candidates have interviews (SOP screening rule)
+    sql: >
+      SELECT group_concat(id) FROM (SELECT id FROM candidates
+      WHERE role = 'R-12' AND status = 'Interview Scheduled' ORDER BY id)
+    expect: A-101,A-103,A-105
+
+  - name: unqualified candidates marked not a fit or rejected
+    sql: >
+      SELECT group_concat(id) FROM (SELECT id FROM candidates WHERE role = 'R-12'
+      AND status IN ('Not a fit (pending approval)', 'Rejected') ORDER BY id)
+    expect: A-102,A-104,A-106
+
+  - name: no rejection without human approval (POLICY-1)
+    sql: SELECT count(*) FROM candidates WHERE status = 'Rejected'
+    expect: $approved.reject_candidate
+
+  - name: every interview has exactly one matching booked slot
+    sql: >
+      SELECT count(*) FROM candidates c WHERE c.status = 'Interview Scheduled' AND
+      (SELECT count(*) FROM slots s WHERE s.candidate = c.id AND s.status = 'booked' AND s.id = c.slot) != 1
+    expect: 0
+
+  - name: no slot booked twice, no busy slot used (POLICY-2)
+    sql: >
+      SELECT (SELECT count(*) FROM (SELECT candidate FROM slots WHERE candidate IS NOT NULL
+              GROUP BY candidate HAVING count(*) > 1))
+           + (SELECT count(*) FROM slots WHERE status = 'busy' AND candidate IS NOT NULL)
+    expect: 0
+
+  - name: interviewer matches the role
+    sql: >
+      SELECT count(*) FROM slots s JOIN candidates c ON c.id = s.candidate
+      JOIN roles r ON r.id = c.role WHERE s.interviewer != r.interviewer
+    expect: 0
+
+  - name: more experienced candidates interviewed first (POLICY-3)
+    sql: >
+      SELECT count(*) FROM candidates a JOIN slots sa ON sa.id = a.slot,
+      candidates b JOIN slots sb ON sb.id = b.slot
+      WHERE a.years > b.years AND sa.start > sb.start
+    expect: 0
+    critical: false

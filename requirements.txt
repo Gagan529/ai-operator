@@ -6,3 +6,6 @@ pydantic
 openai
 python-dotenv
 pyyaml
+pytest
+langgraph
+langgraph-checkpoint-sqlite

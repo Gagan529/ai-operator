@@ -1,0 +1,16 @@
+# Metadata and wiring only. Business rules live in SOP.md, policies.yaml and checks.yaml.
+id: acme_talent
+name: Acme Talent Pvt Ltd (fictional)
+origins:                      # the only sites the operator may open
+  - http://127.0.0.1:8001
+start_url: /
+db: runs/acme_talent.db       # read by the verifier only, never by the operator
+sop: SOP.md
+policies: policies.yaml
+checks: checks.yaml
+demo:                         # local demo wiring for the console
+  mock_app: mockapps.recruiting:app
+  reset: /admin/reset         # machine endpoint; the operator itself is denied it (policies.yaml)
+default_task: >
+  Screen every applicant for role R-12 (Backend Engineer) following the SOP,
+  then book interviews for the shortlisted candidates.
