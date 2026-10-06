@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from urllib.parse import urlparse
 from typing import Callable
 
 from aiop.browser import Browser, BrowserError
@@ -60,18 +61,26 @@ class Runtime:
         if state.step >= state.budgets.max_steps:
             return self._stop(state, RunStatus.STOPPED, f"step budget of {state.budgets.max_steps} used up")
         state.step += 1
-        try:
-            action = self.proposer.propose_action(self._ctx(state))
-        except (ProposalError, ValueError) as e:
-            kind = FailureKind.TRANSIENT if getattr(e, "transient", False) else FailureKind.INVALID_ACTION
-            return self._failed(state, Failure(kind=kind, message=str(e)[:300]))
-        finally:
-            self._tokens(state)
+        if not state.queue:                  # ask the LLM only when the last batch is used up
+            try:
+                state.queue = self._propose(state)
+            except (ProposalError, ValueError) as e:
+                kind = FailureKind.TRANSIENT if getattr(e, "transient", False) else FailureKind.INVALID_ACTION
+                return self._failed(state, Failure(kind=kind, message=str(e)[:300]))
+            finally:
+                self._tokens(state)
+            state.llm_calls += 1
+            batch_size = len(state.queue)
+        else:
+            batch_size = 0
+        action = state.queue.pop(0)
         state.pending_action = action
         state.feedback = None
-        self._log(state, "propose", _describe(action), action.model_dump(exclude_none=True))
+        tag = f"  [batch of {batch_size}]" if batch_size > 1 else ("  [from batch]" if batch_size == 0 else "")
+        self._log(state, "propose", _describe(action) + tag, action.model_dump(exclude_none=True))
 
         if action.tool == "done":
+            state.queue = []
             return self._verify(state, claim=action.reason)
 
         page = state.last_observation.url if state.last_observation else ""
@@ -105,18 +114,33 @@ class Runtime:
             return self._await_approval(state, action, decision, target)
         if action.tool == "note":
             return self._note(state, action.value or "")
-        self._execute(state, action, target)
+        before = state.last_observation.url if state.last_observation else ""
+        ok = self._execute(state, action, target, effect=decision.effect)
+        after = state.last_observation.url if state.last_observation else ""
+        if not ok or after != before or action.tool == "goto":
+            state.queue = []                 # refs in the rest of the batch belong to the old page
         return state
+
+    def _propose(self, state: RunState) -> list[ProposedAction]:
+        ctx = self._ctx(state)
+        many = getattr(self.proposer, "propose_actions", None)
+        return list(many(ctx)) if many else [self.proposer.propose_action(ctx)]
 
     def _note(self, state: RunState, text: str) -> RunState:
         """Working memory: facts the model will need on later pages. Kept small and capped."""
         b = state.budgets
-        text = " ".join(text.split())[:b.max_note_chars]
+        text = " ".join(text.split())
+        cut = len(text) > b.max_note_chars
+        text = text[:b.max_note_chars]
         if sum(len(n) for n in state.notes) + len(text) > b.max_notes_chars:
             return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION,
                                                message="notes are full; keep only what you still need"))
         state.notes.append(text)
         state.failures_in_row = 0
+        state.recent_keys = []               # progress: revisiting a page is no longer going in circles
+        if cut:
+            state.feedback = (f"Your note was cut to {b.max_note_chars} characters. Keep notes compact "
+                              f"(skills and years, not whole texts); add another note for anything lost.")
         state.history.append(f"{state.step}. noted: {text[:80]}")
         return state
 
@@ -150,13 +174,15 @@ class Runtime:
             action = ProposedAction(tool="click", ref=ref, reason=pending.action.reason)
         else:
             action = pending.action
-        if self._execute(state, action, target, approved_effect=pending.decision.effect):
+        if self._execute(state, action, target, approved_effect=pending.decision.effect,
+                         effect=pending.decision.effect):
             if pending.decision.effect:
                 state.approved[pending.decision.effect] = state.approved.get(pending.decision.effect, 0) + 1
         return state
 
     def _await_approval(self, state: RunState, action: ProposedAction, decision: PolicyDecision,
                         target: Target | None) -> RunState:
+        state.queue = []                     # the model re-plans after the human answers
         state.pending_approval = PendingApproval(action=action, decision=decision,
                                                  target=target or Target(ref=action.ref or "", tag=""))
         state.status = RunStatus.AWAITING_APPROVAL
@@ -169,7 +195,7 @@ class Runtime:
 
     # ---------- acting, with deterministic retries ----------
     def _execute(self, state: RunState, action: ProposedAction, target: Target | None,
-                 approved_effect: str | None = None) -> bool:
+                 approved_effect: str | None = None, effect: str | None = None) -> bool:
         attempt = 0
         while True:
             try:
@@ -182,6 +208,9 @@ class Runtime:
             if failure is None:
                 state.failures_in_row = 0
                 state.history.append(f"{state.step}. {_describe(action)} -> ok, now at {result.observation.url}")
+                if target is not None and target.is_submit:
+                    state.completed.append(_change(target, effect))
+                    state.recent_keys = []   # progress resets the cycle guard
                 return True
             self._log(state, "failure", f"{failure.kind.value}: {failure.message}", failure.model_dump(mode="json"))
             retryable = action.tool == "goto" or (target is not None and (target.is_submit or bool(target.href)))
@@ -242,6 +271,7 @@ class Runtime:
                 result: VerificationResult | None = None) -> RunState:
         if not logged:
             self._log(state, "failure", f"{f.kind.value}: {f.message}", f.model_dump(mode="json"))
+        state.queue = []
         rec = decide(f, state, attempt=0, retryable=False)
         state.failures_in_row += 1
         if rec.move == Move.STOP:
@@ -267,6 +297,19 @@ class Runtime:
         state.status = status
         state.stop_reason = reason
         state.pending_action = None
+        state.queue = []
+        if result is None and state.verification is None:
+            # The agent never said done, but the report must still tell the truth about the data.
+            result = self.verifier.run({"approved": state.approved})
+            state.verification = result.outcome
+            state.verification_ref = self.evidence.save_json(f"verification-{state.step:03d}.json",
+                                                             result.model_dump(mode="json"))
+            failed = [c.name for c in result.checks if not c.passed]
+            self._log(state, "verify", f"run ended before the agent said done; data check says {result.outcome.value}"
+                      + (f": {len(failed)} check(s) failed" if failed else ""),
+                      {"outcome": result.outcome.value, "failed": failed}, artifact=state.verification_ref)
+            reason = f"{reason} (data check: {result.outcome.value})"
+            state.stop_reason = reason
         after = self.verifier.snapshot_db()
         self.evidence.save_json("db_after.json", after)
         before_path = self.evidence.dir / "db_before.json"
@@ -311,8 +354,9 @@ class Runtime:
     def _ctx(self, state: RunState) -> Context:
         if self._snapshot is None:           # e.g. after resuming from a checkpoint
             self._snapshot = self.browser.read().observation.snapshot
-        return Context(task=state.task, sop=self.company.sop, snapshot=self._snapshot,
-                       plan=state.plan, history=state.history, feedback=state.feedback, notes=state.notes)
+        return Context(task=state.task, sop=self.company.sop, snapshot=self._snapshot, plan=state.plan,
+                       history=state.history, feedback=state.feedback, notes=state.notes,
+                       completed=state.completed)
 
     def _tokens(self, state: RunState) -> None:
         state.tokens_in = self.proposer.tokens_in
@@ -321,6 +365,12 @@ class Runtime:
     def _log(self, state: RunState, kind: str, summary: str, data: dict | None = None,
              artifact: str | None = None) -> None:
         state.event_ids.append(self.evidence.add(state.step, kind, summary, data, artifact))
+
+
+def _change(t: Target, effect: str | None) -> str:
+    """One line for the ALREADY COMPLETED list, e.g. 'shortlist_candidate @ /ats/candidate/A-101 (status=...)'."""
+    fields = ", ".join(f"{k}={v[:30]}" for k, v in t.form_fields.items() if v)
+    return f"{effect or 'submit'} @ {urlparse(t.form_action or t.page_url).path}" + (f" ({fields})" if fields else "")
 
 
 def _describe(a: ProposedAction) -> str:

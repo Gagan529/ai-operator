@@ -90,3 +90,23 @@ def test_runtime_treats_provider_outage_as_transient(make_runtime):
     failures = [e for e in rt.evidence.events() if e.kind == "failure"]
     assert failures and all(e.summary.startswith(FailureKind.TRANSIENT.value) for e in failures)
     assert st.status == RunStatus.STOPPED          # bounded: it gives up instead of looping forever
+
+
+def test_batch_reply_parsed(monkeypatch):
+    p, _ = proposer(['{"actions": [{"tool": "fill", "ref": "e5", "value": "S-1"}, '
+                     '{"tool": "fill", "ref": "e6", "value": "A-105"}, {"tool": "click", "ref": "e7"}]}'], monkeypatch)
+    assert [a.tool for a in p.propose_actions(CTX)] == ["fill", "fill", "click"]
+
+
+def test_done_must_be_alone(monkeypatch):
+    p, fake = proposer(['{"actions": [{"tool": "click", "ref": "e7"}, {"tool": "done"}]}',
+                        '{"actions": [{"tool": "done", "reason": "finished"}]}'], monkeypatch)
+    assert [a.tool for a in p.propose_actions(CTX)] == ["done"]
+    assert "done must be the only action" in fake.calls[1]["messages"][-1]["content"]
+
+
+def test_batch_too_long_rejected(monkeypatch):
+    six = '{"actions": [' + ",".join(['{"tool": "read"}'] * 6) + "]}"
+    p, _ = proposer([six, six], monkeypatch)
+    with pytest.raises(ProposalError):
+        p.propose_actions(CTX)

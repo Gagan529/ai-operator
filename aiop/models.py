@@ -47,6 +47,19 @@ class ProposedAction(BaseModel):
         return f"{self.tool}|{self.ref}|{self.url}|{self.value}"
 
 
+class ActionBatch(BaseModel):
+    """Up to 5 actions in one reply (e.g. fill, fill, click Book). The runtime still checks and runs
+    them one at a time, and drops the rest after a failure, an approval request or a page change."""
+    model_config = ConfigDict(extra="forbid")
+    actions: list[ProposedAction] = Field(min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def _done_alone(self) -> ActionBatch:
+        if len(self.actions) > 1 and any(a.tool == "done" for a in self.actions):
+            raise ValueError("done must be the only action in its reply")
+        return self
+
+
 class Plan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     steps: list[str]
@@ -190,8 +203,8 @@ class Budgets(BaseModel):
     cycle_window: int = 8                  # cycle guard looks at this many recent steps:
     cycle_warn: int = 3                    #   a step seen this often -> refuse it once, with a warning
                                            #   seen once more after that -> stop
-    max_note_chars: int = 300              # per note
-    max_notes_chars: int = 4000            # all notes together
+    max_note_chars: int = 1000             # per note (one note may cover a whole table)
+    max_notes_chars: int = 6000            # all notes together
 
 
 class RunState(BaseModel):
@@ -203,6 +216,9 @@ class RunState(BaseModel):
     step: int = 0
     status: RunStatus = RunStatus.RUNNING
     pending_action: ProposedAction | None = None
+    queue: list[ProposedAction] = []       # rest of the current batch, still to be checked and run
+    completed: list[str] = []              # business changes the runtime saw succeed (shown as "don't repeat")
+    llm_calls: int = 0
     pending_approval: PendingApproval | None = None
     last_observation: ObservationSummary | None = None
     verification: Outcome | None = None
