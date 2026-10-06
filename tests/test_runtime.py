@@ -211,3 +211,33 @@ def test_long_note_is_cut_with_feedback(make_runtime):
     rt.start(st)
     rt.step(st)
     assert len(st.notes[0]) == 1000 and "cut to 1000" in st.feedback
+
+
+
+def test_usage_logged_per_llm_call(make_runtime):
+    rt, st = make_runtime([A(tool="read"), DONE])
+
+    class Counting(type(rt.proposer)):
+        def propose_actions(self, ctx):
+            self.tokens_in += 1000
+            self.tokens_cached += 600
+            self.last_usage = {"model": "m", "attempts": 1, "in": 1000, "cached": 600, "out": 20, "reasoning": 5, "ms": 9}
+            return super().propose_actions(ctx)
+
+    rt.proposer.__class__ = Counting
+    rt.run_until_blocked(rt.start(st))
+    lines = (rt.evidence.dir / "llm_usage.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == st.llm_calls >= 2                     # one usage line per LLM call
+    assert st.tokens_cached == 600 * st.llm_calls
+    summary = rt.evidence.usage_summary()
+    assert summary["cache_hit_pct"] == 60.0 and summary["in_max"] == 1000
+    assert "LLM usage" in (rt.evidence.dir / "report.html").read_text(encoding="utf-8")
+
+
+def test_fill_on_a_dropdown_gets_a_clear_hint(make_runtime):
+    rt, st = make_runtime([A(tool="goto", url="/ats/candidate/A-101"),
+                           lambda s: A(tool="fill", ref=find_ref(s, r'select "Status"'), value="Shortlisted")])
+    rt.start(st)
+    rt.step(st)
+    rt.step(st)
+    assert "is a dropdown: use the select tool" in st.feedback

@@ -75,7 +75,8 @@ class ScriptedProposer:
         self.steps = list(steps)
         self.plan = plan or ["scripted run"]
         self.i = 0
-        self.tokens_in = self.tokens_out = 0
+        self.tokens_in = self.tokens_out = self.tokens_cached = self.tokens_reasoning = 0
+        self.last_usage: dict | None = None
 
     def propose_plan(self, ctx: Context) -> Plan:
         return Plan(steps=self.plan)
@@ -155,7 +156,8 @@ class OpenAICompatibleProposer:
         self.reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "low").strip()
         self.min_interval = float(os.getenv("LLM_MIN_INTERVAL_S", "0") or 0)
         self._last_call = 0.0
-        self.tokens_in = self.tokens_out = 0
+        self.tokens_in = self.tokens_out = self.tokens_cached = self.tokens_reasoning = 0
+        self.last_usage: dict | None = None  # the latest call's usage, picked up by the runtime
 
     def propose_plan(self, ctx: Context) -> Plan:
         user = f"TASK:\n{ctx.task}\n\nSOP:\n{ctx.sop}\n\nFIRST PAGE:\n{ctx.snapshot}"
@@ -186,18 +188,38 @@ class OpenAICompatibleProposer:
         parse = schema.model_validate_json if hasattr(schema, "model_validate_json") else schema
         name = getattr(schema, "__name__", "reply")
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        for attempt in range(2):            # one repair attempt, then give up
-            resp = self._call(messages)
-            if resp.usage:
-                self.tokens_in += resp.usage.prompt_tokens or 0
-                self.tokens_out += resp.usage.completion_tokens or 0
-            text = resp.choices[0].message.content or ""
-            try:
-                return parse(_strip_fences(text))
-            except ValidationError as e:
-                messages += [{"role": "assistant", "content": text},
-                             {"role": "user", "content": f"Invalid reply: {_short(e)}. Reply with one valid JSON object."}]
-        raise ProposalError(f"model gave no valid {name} after 2 attempts: {text[:200]!r}")
+        usage = {"model": self.model, "attempts": 0, "in": 0, "cached": 0, "out": 0, "reasoning": 0}
+        started = time.monotonic()
+        try:
+            for attempt in range(2):            # one repair attempt, then give up
+                resp = self._call(messages)
+                usage["attempts"] += 1
+                self._count(resp, usage)
+                text = resp.choices[0].message.content or ""
+                try:
+                    return parse(_strip_fences(text))
+                except ValidationError as e:
+                    messages += [{"role": "assistant", "content": text},
+                                 {"role": "user", "content": f"Invalid reply: {_short(e)}. Reply with one valid JSON object."}]
+            raise ProposalError(f"model gave no valid {name} after 2 attempts: {text[:200]!r}")
+        finally:
+            usage["ms"] = round((time.monotonic() - started) * 1000)
+            self.last_usage = usage
+
+    def _count(self, resp, usage: dict) -> None:
+        """Token counts, including cache hits and hidden reasoning, when the provider reports them."""
+        u = getattr(resp, "usage", None)
+        if not u:
+            return
+        cached = _field(getattr(u, "prompt_tokens_details", None), "cached_tokens")
+        reasoning = _field(getattr(u, "completion_tokens_details", None), "reasoning_tokens")
+        for key, n in (("in", u.prompt_tokens or 0), ("out", u.completion_tokens or 0),
+                       ("cached", cached), ("reasoning", reasoning)):
+            usage[key] += n
+        self.tokens_in += u.prompt_tokens or 0
+        self.tokens_out += u.completion_tokens or 0
+        self.tokens_cached += cached
+        self.tokens_reasoning += reasoning
 
     def _call(self, messages: list[dict]):
         import openai
@@ -228,6 +250,13 @@ def _parse_actions(text: str) -> list[ProposedAction]:
             return [ProposedAction.model_validate_json(text)]
         except ValidationError:
             raise batch_error from None
+
+
+def _field(details, name: str) -> int:
+    if details is None:
+        return 0
+    value = details.get(name) if isinstance(details, dict) else getattr(details, name, None)
+    return int(value or 0)
 
 
 def _strip_fences(text: str) -> str:

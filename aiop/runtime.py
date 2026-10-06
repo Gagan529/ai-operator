@@ -68,7 +68,7 @@ class Runtime:
                 kind = FailureKind.TRANSIENT if getattr(e, "transient", False) else FailureKind.INVALID_ACTION
                 return self._failed(state, Failure(kind=kind, message=str(e)[:300]))
             finally:
-                self._tokens(state)
+                self._tokens(state, "actions")
             state.llm_calls += 1
             batch_size = len(state.queue)
         else:
@@ -333,7 +333,7 @@ class Runtime:
             self._log(state, "plan", f"planning failed, continuing without a plan: {e}")
             return
         finally:
-            self._tokens(state)
+            self._tokens(state, "plan")
         state.plan = plan.steps
         self._log(state, "plan", f"{len(plan.steps)} steps", {"steps": plan.steps})
 
@@ -358,9 +358,15 @@ class Runtime:
                        history=state.history, feedback=state.feedback, notes=state.notes,
                        completed=state.completed)
 
-    def _tokens(self, state: RunState) -> None:
-        state.tokens_in = self.proposer.tokens_in
-        state.tokens_out = self.proposer.tokens_out
+    def _tokens(self, state: RunState, kind: str) -> None:
+        p = self.proposer
+        state.tokens_in, state.tokens_out = p.tokens_in, p.tokens_out
+        state.tokens_cached = getattr(p, "tokens_cached", 0)
+        state.tokens_reasoning = getattr(p, "tokens_reasoning", 0)
+        usage = getattr(p, "last_usage", None)
+        if usage:                            # one line per LLM call, for the cost and caching numbers
+            self.evidence.append_jsonl("llm_usage.jsonl", {"step": state.step, "kind": kind, **usage})
+            p.last_usage = None
 
     def _log(self, state: RunState, kind: str, summary: str, data: dict | None = None,
              artifact: str | None = None) -> None:

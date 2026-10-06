@@ -235,4 +235,6 @@ class RunState(BaseModel):
     stop_reason: str | None = None
     tokens_in: int = 0
     tokens_out: int = 0
+    tokens_cached: int = 0                 # input tokens the provider served from its prompt cache
+    tokens_reasoning: int = 0              # hidden "thinking" tokens (billed as output)
     budgets: Budgets = Budgets()

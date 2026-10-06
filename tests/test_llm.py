@@ -22,7 +22,9 @@ class FakeCompletions:
         if isinstance(r, Exception):
             raise r
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=r))],
-                               usage=SimpleNamespace(prompt_tokens=100, completion_tokens=10))
+                               usage=SimpleNamespace(prompt_tokens=100, completion_tokens=10,
+                                                     prompt_tokens_details=SimpleNamespace(cached_tokens=40),
+                                                     completion_tokens_details={"reasoning_tokens": 7}))
 
 
 def proposer(replies, monkeypatch, **env):
@@ -110,3 +112,17 @@ def test_batch_too_long_rejected(monkeypatch):
     p, _ = proposer([six, six], monkeypatch)
     with pytest.raises(ProposalError):
         p.propose_actions(CTX)
+
+
+def test_usage_counts_cache_and_reasoning(monkeypatch):
+    p, _ = proposer(['{"tool": "read"}'], monkeypatch)
+    p.propose_actions(CTX)
+    assert (p.tokens_in, p.tokens_cached, p.tokens_out, p.tokens_reasoning) == (100, 40, 10, 7)
+    assert p.last_usage["attempts"] == 1 and p.last_usage["cached"] == 40 and "ms" in p.last_usage
+
+
+def test_usage_recorded_even_when_the_reply_is_unusable(monkeypatch):
+    p, _ = proposer(["nope", "still nope"], monkeypatch)
+    with pytest.raises(ProposalError):
+        p.propose_actions(CTX)
+    assert p.last_usage["attempts"] == 2 and p.last_usage["in"] == 200      # failed calls still cost tokens

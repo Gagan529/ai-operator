@@ -200,10 +200,14 @@ class Browser:
 
     def fill(self, ref: str, value: str) -> ToolResult:
         loc = self._locate(ref)
+        if self._tag(loc) == "select":
+            raise ActionFailed(f"{ref} is a dropdown: use the select tool with one of its options")
         return self._act(lambda: loc.fill(value))
 
     def select(self, ref: str, value: str) -> ToolResult:
         loc = self._locate(ref)
+        if self._tag(loc) != "select":
+            raise ActionFailed(f"{ref} is not a dropdown: use fill for text boxes, click for buttons and links")
         return self._act(lambda: loc.select_option(label=value))
 
     def read(self) -> ToolResult:
@@ -258,6 +262,10 @@ class Browser:
     def screenshot(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.page.screenshot(path=str(path), full_page=True)
+
+    @staticmethod
+    def _tag(loc) -> str:
+        return loc.evaluate("e => e.tagName").lower()
 
     def _locate(self, ref: str):
         loc = self.page.locator(f'[data-aiop-ref="{ref}"]')

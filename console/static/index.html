@@ -226,7 +226,7 @@ async function poll() {
     const cls = {RUNNING: "b-info", AWAITING_APPROVAL: "b-warn", VERIFIED: "b-ok", FAILED: "b-bad", STOPPED: "b-bad"}[s.status];
     $("statusBadge").className = `badge big ${cls}`; $("statusBadge").textContent = s.status.replace("_", " ");
     $("step").textContent = s.step; $("recoveries").textContent = s.recoveries; $("replans").textContent = s.replans;
-    $("tokens").textContent = `${s.tokens_in} / ${s.tokens_out}`;
+    $("tokens").textContent = `in ${s.tokens_in} (cached ${s.tokens_cached}) · out ${s.tokens_out} (reasoning ${s.tokens_reasoning}) · ${s.llm_calls} LLM calls`;
     if (s.plan.length) $("plan").innerHTML = s.plan.map(p => `<li>${esc(p)}</li>`).join("");
   }
   showApproval(v.interrupt);

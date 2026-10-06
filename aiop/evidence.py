@@ -19,6 +19,16 @@ from aiop.models import EvidenceEvent, RunState, VerificationResult
 RUNS = Path(__file__).resolve().parent.parent / "runs"
 
 
+def _usage_html(u: dict[str, Any] | None) -> str:
+    if not u:
+        return ""
+    return ("<h2>LLM usage</h2><p>"
+            f"{u['calls']} calls · input per call min {u['in_min']} / avg {u['in_avg']} / max {u['in_max']} tokens "
+            f"(bounded context: it stays flat instead of growing with the run) · cache hits {u['cached']} tokens "
+            f"({u['cache_hit_pct']}%) · reasoning {u['reasoning']} of {u['out']} output tokens · "
+            f"avg {u['avg_ms']} ms per call</p>")
+
+
 class EvidenceStore:
     def __init__(self, run_id: str, root: Path = RUNS):
         self.run_id = run_id
@@ -51,6 +61,28 @@ class EvidenceStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
         return rel
+
+    def append_jsonl(self, rel: str, obj: Any) -> str:
+        with self.path(rel).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(obj, default=str) + "\n")
+        return rel
+
+    def usage_summary(self) -> dict[str, Any] | None:
+        """Per-call input size stays flat when context is bounded; the report shows it."""
+        p = self.dir / "llm_usage.jsonl"
+        if not p.exists():
+            return None
+        rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if not rows:
+            return None
+        ins = [r["in"] for r in rows]
+        total_in = sum(ins)
+        cached = sum(r["cached"] for r in rows)
+        return {"calls": len(rows), "in": total_in, "cached": cached,
+                "out": sum(r["out"] for r in rows), "reasoning": sum(r["reasoning"] for r in rows),
+                "in_min": min(ins), "in_avg": round(total_in / len(rows)), "in_max": max(ins),
+                "cache_hit_pct": round(100 * cached / total_in, 1) if total_in else 0.0,
+                "avg_ms": round(sum(r.get("ms", 0) for r in rows) / len(rows))}
 
     def save_json(self, rel: str, obj: Any) -> str:
         return self.save_text(rel, json.dumps(obj, indent=2, default=str))
@@ -103,7 +135,9 @@ class EvidenceStore:
                f"<p><b>Company:</b> {html.escape(state.company)} · <b>Task:</b> {html.escape(state.task)}</p>"
                f"<p><b>Verification:</b> {state.verification.value if state.verification else 'not run'}"
                f" · <b>Stop reason:</b> {html.escape(state.stop_reason or '-')}"
-               f" · <b>Tokens:</b> {state.tokens_in} in / {state.tokens_out} out</p>"
+               f" · <b>Tokens:</b> {state.tokens_in} in ({state.tokens_cached} cached) / {state.tokens_out} out"
+               f" ({state.tokens_reasoning} reasoning) · <b>LLM calls:</b> {state.llm_calls}</p>"
+               + _usage_html(self.usage_summary()) +
                f"<h2>Verification checks</h2><table><tr><th></th><th>Check</th><th>Expected</th><th>Actual</th></tr>{checks}</table>"
                f"<h2>Timeline</h2><table><tr><th>Step</th><th>Kind</th><th>What happened</th><th>Artefact</th></tr>{rows}</table>")
         return self.save_text("report.html", doc)
