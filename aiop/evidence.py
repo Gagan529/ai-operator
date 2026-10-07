@@ -52,8 +52,8 @@ class EvidenceStore:
             if line.strip():
                 try:
                     out.append(EvidenceEvent.model_validate_json(line))
-                except ValueError:      # a line still being written by a live run
-                    break
+                except ValueError:      # a line still being written, or cut off by a killed process
+                    continue
         return out
 
     def save_text(self, rel: str, text: str) -> str:

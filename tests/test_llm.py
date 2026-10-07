@@ -24,7 +24,7 @@ class FakeCompletions:
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=r))],
                                usage=SimpleNamespace(prompt_tokens=100, completion_tokens=10,
                                                      prompt_tokens_details=SimpleNamespace(cached_tokens=40),
-                                                     completion_tokens_details={"reasoning_tokens": 7}))
+                                                     completion_tokens_details=SimpleNamespace(reasoning_tokens=7)))
 
 
 def proposer(replies, monkeypatch, **env):

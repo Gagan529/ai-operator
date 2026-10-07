@@ -269,10 +269,7 @@ def _parse_actions(text: str) -> list[ProposedAction]:
 
 
 def _field(details, name: str) -> int:
-    if details is None:
-        return 0
-    value = details.get(name) if isinstance(details, dict) else getattr(details, name, None)
-    return int(value or 0)
+    return int(getattr(details, name, None) or 0)   # None: the provider did not report it
 
 
 def _strip_fences(text: str) -> str:
