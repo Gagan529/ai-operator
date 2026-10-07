@@ -156,6 +156,7 @@ class VerificationCheck(BaseModel):
     actual: Any
     passed: bool
     critical: bool = True                  # a failed critical check makes the run FAIL
+    kind: Literal["invariant", "goal"] = "goal"   # invariant = must hold after any task
     evidence: str = ""                     # the query or source that produced `actual`
 
 
@@ -163,6 +164,7 @@ class Outcome(str, Enum):
     PASS = "PASS"
     FAIL = "FAIL"
     PARTIAL = "PARTIAL"
+    UNVERIFIED = "UNVERIFIED"              # invariants hold, but the task has no goal checks
 
 
 class VerificationResult(BaseModel):
@@ -170,12 +172,15 @@ class VerificationResult(BaseModel):
     checks: list[VerificationCheck]
 
     @classmethod
-    def from_checks(cls, checks: list[VerificationCheck]) -> VerificationResult:
-        """PASS: all passed. FAIL: a critical check failed. PARTIAL: only non-critical ones failed."""
-        if all(c.passed for c in checks):
-            outcome = Outcome.PASS
-        elif any(c.critical and not c.passed for c in checks):
+    def from_checks(cls, checks: list[VerificationCheck], goal_checked: bool = True) -> VerificationResult:
+        """FAIL: a critical check failed. UNVERIFIED: nothing critical failed, but no goal was checked.
+        PASS: all passed. PARTIAL: only non-critical ones failed."""
+        if any(c.critical and not c.passed for c in checks):
             outcome = Outcome.FAIL
+        elif not goal_checked:
+            outcome = Outcome.UNVERIFIED
+        elif all(c.passed for c in checks):
+            outcome = Outcome.PASS
         else:
             outcome = Outcome.PARTIAL
         return cls(outcome=outcome, checks=checks)
@@ -197,6 +202,7 @@ class RunStatus(str, Enum):
     RUNNING = "RUNNING"
     AWAITING_APPROVAL = "AWAITING_APPROVAL"
     VERIFIED = "VERIFIED"                  # agent finished AND the verifier passed
+    UNVERIFIED = "UNVERIFIED"              # agent finished, invariants hold, goal not machine-checked
     FAILED = "FAILED"                      # verifier failed or recovery gave up
     STOPPED = "STOPPED"                    # budget, loop guard or human deny
 

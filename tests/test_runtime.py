@@ -280,3 +280,12 @@ def test_current_company_data_is_consistent(make_runtime, company):
     finally:
         recruiting.SEED = original
         recruiting.reset()
+
+
+def test_unknown_task_ends_unverified(make_runtime):
+    """Same correct work, but the task has no goal checks: the run must not claim VERIFIED."""
+    rt, st = make_runtime(screening() + [DONE], task="Tidy up the R-12 pipeline and book interviews")
+    rt.run_until_blocked(rt.start(st))
+    assert st.status == RunStatus.UNVERIFIED and st.verification == Outcome.UNVERIFIED
+    assert "no goal checks" in st.stop_reason
+    assert "UNVERIFIED" in (rt.evidence.dir / "report.html").read_text(encoding="utf-8")

@@ -26,9 +26,19 @@ class Company:
     db_path: Path
     sop: str
     policies: dict[str, Any]
-    checks: list[dict[str, Any]]
+    invariants: list[dict[str, Any]]       # checked after any task
+    goals: dict[str, list[dict[str, Any]]] # task text (normalised) -> goal checks for that task
     default_task: str
     demo: dict[str, Any] = field(default_factory=dict)
+
+    def goal_checks(self, task: str) -> list[dict[str, Any]] | None:
+        """The goal checks for this exact task, or None: an unknown task cannot be VERIFIED."""
+        return self.goals.get(_norm(task))
+
+    @property
+    def checks(self) -> list[dict[str, Any]]:
+        """Everything checked for the default task (for display)."""
+        return self.invariants + (self.goal_checks(self.default_task) or [])
 
     def module(self, name: str) -> ModuleType | None:
         """An optional Python file in the company folder, e.g. scripted.py for offline replays."""
@@ -46,6 +56,10 @@ class Company:
         """`origins` overrides company.yaml, e.g. when tests serve the app on another port."""
         folder = COMPANIES / company_id
         meta = _yaml(folder / "company.yaml")
+        checks = _yaml(folder / meta["checks"])
+        default_task = " ".join(meta.get("default_task", "").split())
+        goals = {_norm(default_task if task == "default" else task): list(cs)
+                 for task, cs in (checks.get("goals") or {}).items()}
         return cls(
             id=meta["id"],
             name=meta["name"],
@@ -55,10 +69,15 @@ class Company:
             db_path=ROOT / meta["db"],
             sop=(folder / meta["sop"]).read_text(encoding="utf-8"),
             policies=_yaml(folder / meta["policies"]),
-            checks=_yaml(folder / meta["checks"])["checks"],
-            default_task=" ".join(meta.get("default_task", "").split()),
+            invariants=checks.get("invariants") or [],
+            goals=goals,
+            default_task=default_task,
             demo=meta.get("demo") or {},
         )
+
+
+def _norm(task: str) -> str:
+    return " ".join(task.split()).lower()
 
 
 def _yaml(path: Path) -> dict[str, Any]:

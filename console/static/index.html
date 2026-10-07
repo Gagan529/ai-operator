@@ -161,7 +161,7 @@ const KIND = {
   policy: e => e.summary.startsWith("ALLOW") ? "b-ok" : e.summary.startsWith("DENY") ? "b-bad" : "b-warn",
   approval_request: () => "b-warn", approval: e => e.summary.startsWith("APPROVED") ? "b-ok" : "b-bad",
   failure: () => "b-bad", recover: () => "b-info", verify: e => e.summary.includes("PASS") ? "b-ok" : "b-bad",
-  end: e => e.summary.startsWith("VERIFIED") ? "b-ok" : "b-bad", stop: () => "b-bad",
+  end: e => e.summary.startsWith("VERIFIED") ? "b-ok" : e.summary.startsWith("UNVERIFIED") ? "b-warn" : "b-bad", stop: () => "b-bad",
 };
 
 async function loadCompanies() {
@@ -223,7 +223,7 @@ async function poll() {
   }
   const s = v.state;
   if (s) {
-    const cls = {RUNNING: "b-info", AWAITING_APPROVAL: "b-warn", VERIFIED: "b-ok", FAILED: "b-bad", STOPPED: "b-bad"}[s.status];
+    const cls = {RUNNING: "b-info", AWAITING_APPROVAL: "b-warn", VERIFIED: "b-ok", UNVERIFIED: "b-warn", FAILED: "b-bad", STOPPED: "b-bad"}[s.status];
     $("statusBadge").className = `badge big ${cls}`; $("statusBadge").textContent = s.status.replace("_", " ");
     $("step").textContent = s.step; $("recoveries").textContent = s.recoveries; $("replans").textContent = s.replans;
     $("tokens").textContent = `in ${s.tokens_in} (cached ${s.tokens_cached}) · out ${s.tokens_out} (reasoning ${s.tokens_reasoning}) · ${s.llm_calls} LLM calls`;

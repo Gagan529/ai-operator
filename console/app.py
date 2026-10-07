@@ -162,7 +162,7 @@ def run_view(run_id: str, since: int = 0):
     verification = None
     if state and state.get("verification_ref"):
         verification = json.loads((RUNS / run_id / state["verification_ref"]).read_text(encoding="utf-8"))
-    finished = bool(state) and state["status"] in (RunStatus.VERIFIED, RunStatus.FAILED, RunStatus.STOPPED)
+    finished = bool(state) and state["status"] in (RunStatus.VERIFIED, RunStatus.UNVERIFIED, RunStatus.FAILED, RunStatus.STOPPED)
     return {"state": state, "events": events[since:], "total_events": len(events),
             "interrupt": entry.get("interrupt"), "error": entry.get("error"), "busy": worker.busy,
             "verification": verification, "finished": finished,

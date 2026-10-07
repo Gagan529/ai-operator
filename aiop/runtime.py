@@ -35,7 +35,7 @@ class Runtime:
         self.proposer = proposer
         self.evidence = evidence
         self.policy = PolicyEngine(company.policies)
-        self.verifier = Verifier(company.db_path, company.checks)
+        self.verifier = Verifier(company.db_path, company.invariants)
         self.sleep = sleep
         self._snapshot: str | None = None   # latest full snapshot; never put in the checkpoint
 
@@ -282,8 +282,11 @@ class Runtime:
         return b.read()
 
     # ---------- verification ----------
+    def _check(self, state: RunState) -> VerificationResult:
+        return self.verifier.run({"approved": state.approved}, self.company.goal_checks(state.task))
+
     def _verify(self, state: RunState, claim: str) -> RunState:
-        result = self.verifier.run({"approved": state.approved})
+        result = self._check(state)
         state.verification = result.outcome
         state.verification_ref = self.evidence.save_json(f"verification-{state.step:03d}.json",
                                                          result.model_dump(mode="json"))
@@ -294,6 +297,9 @@ class Runtime:
                   artifact=state.verification_ref)
         if result.outcome == Outcome.PASS:
             return self._finish(state, RunStatus.VERIFIED, "all verification checks passed", result)
+        if result.outcome == Outcome.UNVERIFIED:
+            return self._finish(state, RunStatus.UNVERIFIED, "invariants hold, but this task has no goal checks, "
+                                "so the result is not machine-verified; see the evidence", result)
         detail = "; ".join(f"{c.name} (expected {c.expected}, found {c.actual})" for c in failed)
         if result.outcome == Outcome.PARTIAL and not any(c.critical for c in failed):
             return self._finish(state, RunStatus.VERIFIED, f"verified with warnings: {detail}", result)
@@ -335,7 +341,7 @@ class Runtime:
         state.queue = []
         if result is None and state.verification is None:
             # The agent never said done, but the report must still tell the truth about the data.
-            result = self.verifier.run({"approved": state.approved})
+            result = self._check(state)
             state.verification = result.outcome
             state.verification_ref = self.evidence.save_json(f"verification-{state.step:03d}.json",
                                                              result.model_dump(mode="json"))

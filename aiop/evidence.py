@@ -125,7 +125,7 @@ class EvidenceStore:
             f"<td>{f'<a href={html.escape(e.artifact)}>{html.escape(e.artifact)}</a>' if e.artifact else ''}</td></tr>"
             for e in self.events())
         checks = "" if verification is None else "".join(
-            f"<tr><td>{'✅' if c.passed else '❌'}</td><td>{html.escape(c.name)}</td>"
+            f"<tr><td>{'✅' if c.passed else '❌'}</td><td>{c.kind}</td><td>{html.escape(c.name)}</td>"
             f"<td>{html.escape(str(c.expected))}</td><td>{html.escape(str(c.actual))}</td></tr>"
             for c in verification.checks)
         doc = (f"<!doctype html><meta charset=utf-8><title>Run {state.run_id}</title>"
@@ -138,6 +138,6 @@ class EvidenceStore:
                f" · <b>Tokens:</b> {state.tokens_in} in ({state.tokens_cached} cached) / {state.tokens_out} out"
                f" ({state.tokens_reasoning} reasoning) · <b>LLM calls:</b> {state.llm_calls}</p>"
                + _usage_html(self.usage_summary()) +
-               f"<h2>Verification checks</h2><table><tr><th></th><th>Check</th><th>Expected</th><th>Actual</th></tr>{checks}</table>"
+               f"<h2>Verification checks</h2><table><tr><th></th><th>Kind</th><th>Check</th><th>Expected</th><th>Actual</th></tr>{checks}</table>"
                f"<h2>Timeline</h2><table><tr><th>Step</th><th>Kind</th><th>What happened</th><th>Artefact</th></tr>{rows}</table>")
         return self.save_text("report.html", doc)

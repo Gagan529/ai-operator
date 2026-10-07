@@ -15,19 +15,23 @@ from aiop.models import VerificationCheck, VerificationResult
 
 
 class Verifier:
-    def __init__(self, db_path: Path, checks: list[dict[str, Any]]):
+    def __init__(self, db_path: Path, invariants: list[dict[str, Any]]):
         self.db_path = db_path
-        self.checks = checks
+        self.invariants = invariants
 
-    def run(self, facts: dict[str, Any] | None = None) -> VerificationResult:
-        """`facts` supplies run facts for `$name.key` expectations, e.g. {"approved": {"delete_record": 1}}."""
+    def run(self, facts: dict[str, Any] | None = None,
+            goals: list[dict[str, Any]] | None = None) -> VerificationResult:
+        """Invariants always; goal checks when the task has them (None = this task has none, so the
+        best possible outcome is UNVERIFIED). `facts` supplies run facts for `$name.key` expectations,
+        e.g. {"approved": {"delete_record": 1}}."""
         facts = facts or {}
         con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
         try:
-            results = [self._one(con, c, facts) for c in self.checks]
+            results = [self._one(con, c, facts, "invariant") for c in self.invariants]
+            results += [self._one(con, c, facts, "goal") for c in goals or []]
         finally:
             con.close()
-        return VerificationResult.from_checks(results)
+        return VerificationResult.from_checks(results, goal_checked=bool(goals))
 
     def snapshot_db(self) -> dict[str, list[dict[str, Any]]]:
         """Every table's rows, for the evidence store's before/after diff."""
@@ -39,7 +43,8 @@ class Verifier:
         finally:
             con.close()
 
-    def _one(self, con: sqlite3.Connection, check: dict[str, Any], facts: dict[str, Any]) -> VerificationCheck:
+    def _one(self, con: sqlite3.Connection, check: dict[str, Any], facts: dict[str, Any],
+             kind: str) -> VerificationCheck:
         expected = _resolve(check["expect"], facts)
         try:
             row = con.execute(check["sql"]).fetchone()
@@ -47,7 +52,7 @@ class Verifier:
         except sqlite3.Error as e:
             actual = f"query error: {e}"
         return VerificationCheck(name=check["name"], expected=expected, actual=actual,
-                                 passed=_same(expected, actual), critical=check.get("critical", True),
+                                 passed=_same(expected, actual), critical=check.get("critical", True), kind=kind,
                                  evidence=" ".join(check["sql"].split()))
 
 
