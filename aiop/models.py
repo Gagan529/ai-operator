@@ -236,6 +236,7 @@ class RunState(BaseModel):
     pending_action: ProposedAction | None = None
     queue: list[ProposedAction] = []       # rest of the current batch, still to be checked and run
     completed: list[str] = []              # business changes the runtime saw succeed (shown as "don't repeat")
+    denied: list[str] = []                 # changes a human denied: final, shown every step, refused if proposed again
     llm_calls: int = 0
     pending_approval: PendingApproval | None = None
     last_observation: ObservationSummary | None = None

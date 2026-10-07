@@ -119,6 +119,10 @@ class Runtime:
 
         decision = self.policy.decide(action, target)
         self._log(state, "policy", f"{decision.decision.value}: {decision.reason}", decision.model_dump())
+        if target is not None and target.is_submit and _change(target, decision.effect) in state.denied:
+            return self._failed(state, Failure(kind=FailureKind.POLICY_VIOLATION, message=(
+                f"a human already DENIED exactly this change ({_change(target, decision.effect)}). A denial is "
+                f"final: never propose it again. If the task cannot be finished without it, reply done and say so")))
         if decision.decision == Decision.DENY:
             return self._failed(state, Failure(kind=FailureKind.POLICY_VIOLATION,
                                                message=f"denied by {decision.rule}: {decision.reason}"))
@@ -190,8 +194,10 @@ class Runtime:
         self._log(state, "approval", f"{'APPROVED' if approved else 'DENIED'} by {by}: {_describe(pending.action)}",
                   {"approved": approved, "by": by, "note": note, "effect": pending.decision.effect})
         if not approved:
-            state.feedback = (f"A human DENIED this step ({pending.decision.reason}). "
-                              f"Do not try it again; continue with the rest of the task.")
+            if pending.target.is_submit:
+                state.denied.append(_change(pending.target, pending.decision.effect))
+            state.feedback = (f"A human DENIED this step ({pending.decision.reason}). This is final: it is now "
+                              f"listed under DENIED BY A HUMAN. Continue with the rest of the task.")
             state.history.append(f"{state.step}. {_describe(pending.action)} -> DENIED by {by}")
             self._refresh(state)
             return state
@@ -397,7 +403,7 @@ class Runtime:
             self._snapshot = self.browser.read().observation.snapshot
         return Context(task=state.task, sop=self.company.sop, snapshot=self._snapshot, plan=state.plan,
                        history=state.history, feedback=state.feedback, notes=state.notes,
-                       completed=state.completed)
+                       completed=state.completed, denied=state.denied)
 
     def _tokens(self, state: RunState, kind: str) -> None:
         p = self.proposer
