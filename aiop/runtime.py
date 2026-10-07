@@ -14,11 +14,12 @@ import uuid
 from urllib.parse import urlparse
 from typing import Callable
 
+from aiop.assign import assign
 from aiop.browser import Browser, BrowserError
 from aiop.company import Company
 from aiop.evidence import EvidenceStore
 from aiop.llm import ActionProposer, Context, ProposalError
-from aiop.models import (REF_TOOLS, Decision, Failure, FailureKind, ObservationSummary, Observation, Outcome,
+from aiop.models import (PAGE_FREE_TOOLS, Decision, Failure, FailureKind, ObservationSummary, Observation, Outcome,
                          PendingApproval, PolicyDecision, ProposedAction, RunState, RunStatus, Target,
                          ToolResult, VerificationResult)
 from aiop.policy import PolicyEngine
@@ -125,14 +126,17 @@ class Runtime:
             return self._await_approval(state, action, decision, target)
         if action.tool == "note":
             return self._note(state, action.value or "")
+        if action.tool == "assign":
+            return self._assign(state, action)
         before = state.last_observation.url if state.last_observation else ""
         ok = self._execute(state, action, target, effect=decision.effect)
         after = state.last_observation.url if state.last_observation else ""
         if not ok:
             state.queue = []
         elif after != before or action.tool == "goto":
-            # refs belong to the old page: keep only the page-independent actions before the first ref-based one
-            cut = next((i for i, a in enumerate(state.queue) if a.tool in REF_TOOLS), len(state.queue))
+            # the model has not seen the new page yet: refs, reads and notes queued now would be blind.
+            # Keep only the leading actions that do not depend on it (submit_form, assign).
+            cut = next((i for i, a in enumerate(state.queue) if a.tool not in PAGE_FREE_TOOLS), len(state.queue))
             state.queue = state.queue[:cut]
         return state
 
@@ -145,6 +149,9 @@ class Runtime:
         """Working memory: facts the model will need on later pages. Kept small and capped."""
         b = state.budgets
         text = " ".join(text.split())
+        if not text:
+            return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION,
+                                               message="empty note: write a note after you have seen the page"))
         cut = len(text) > b.max_note_chars
         text = text[:b.max_note_chars]
         if sum(len(n) for n in state.notes) + len(text) > b.max_notes_chars:
@@ -158,6 +165,19 @@ class Runtime:
                               f"(skills and years, not whole texts); add another note for anything lost.")
         state.history.append(f"{state.step}. noted: {text[:80]}")
         return state
+
+    def _assign(self, state: RunState, action: ProposedAction) -> RunState:
+        """Pure computation: solve, keep the full input and output as evidence, put the answer in the notes."""
+        try:
+            result = assign(action.items or [], action.slots or [])
+        except ValueError as e:
+            return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION, message=f"assign: {e}"))
+        rel = self.evidence.save_json(f"assign-{state.step:03d}.json", {
+            "items": [i.model_dump() for i in action.items or []],
+            "slots": [s.model_dump() for s in action.slots or []],
+            "result": result.model_dump()})
+        self._log(state, "assign", result.summary(), result.model_dump(), artifact=rel)
+        return self._note(state, result.summary())
 
     # ---------- approvals ----------
     def resume(self, state: RunState, approved: bool, by: str = "human", note: str = "") -> RunState:
@@ -389,7 +409,7 @@ class Runtime:
 
 
 def _change(t: Target, effect: str | None) -> str:
-    """One line for the ALREADY COMPLETED list, e.g. 'shortlist_candidate @ /ats/candidate/A-101 (status=...)'."""
+    """One line for the ALREADY COMPLETED list, e.g. 'approve_record @ /records/R-1 (state=...)'."""
     fields = ", ".join(f"{k}={v[:30]}" for k, v in t.form_fields.items() if v)
     return f"{effect or 'submit'} @ {urlparse(t.form_action or t.page_url).path}" + (f" ({fields})" if fields else "")
 

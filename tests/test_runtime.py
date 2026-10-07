@@ -169,6 +169,29 @@ def test_rest_of_batch_dropped_after_page_change(make_runtime):
     assert not any(e.summary.startswith("fill") for e in rt.evidence.events() if e.kind == "propose")
 
 
+def test_blind_steps_after_a_page_change_are_dropped(make_runtime):
+    """A note or goto queued behind a goto was written before the model saw that page."""
+    rt, st = make_runtime([[A(tool="goto", url="/jobs"), A(tool="note", value="guess"), A(tool="goto", url="/ats")]])
+    rt.start(st)
+    rt.step(st)
+    assert st.queue == [] and st.notes == []
+
+
+def test_submit_forms_survive_a_page_change(make_runtime):
+    form = A(tool="submit_form", url="/ats/candidate/A-101", fields={"status": "Shortlisted"}, button="Save")
+    rt, st = make_runtime([[A(tool="goto", url="/jobs"), form, A(tool="read")]])
+    rt.start(st)
+    rt.step(st)
+    assert [a.tool for a in st.queue] == ["submit_form"]
+
+
+def test_empty_note_is_refused(make_runtime):
+    rt, st = make_runtime([A(tool="note", value="  ")])
+    rt.start(st)
+    rt.step(st)
+    assert st.notes == [] and "empty note" in st.feedback
+
+
 def test_rest_of_batch_dropped_at_approval(make_runtime):
     rt, st = make_runtime([A(tool="goto", url="/ats/candidate/A-106"),
                            lambda s: [A(tool="select", ref=find_ref(s, r'select "Status"'), value="Rejected"),

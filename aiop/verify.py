@@ -20,7 +20,7 @@ class Verifier:
         self.checks = checks
 
     def run(self, facts: dict[str, Any] | None = None) -> VerificationResult:
-        """`facts` supplies run facts for `$name.key` expectations, e.g. {"approved": {"reject_candidate": 1}}."""
+        """`facts` supplies run facts for `$name.key` expectations, e.g. {"approved": {"delete_record": 1}}."""
         facts = facts or {}
         con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
         try:
@@ -52,7 +52,7 @@ class Verifier:
 
 
 def _resolve(expect: Any, facts: dict[str, Any]) -> Any:
-    """`$approved.reject_candidate` -> facts["approved"].get("reject_candidate", 0)."""
+    """`$approved.delete_record` -> facts["approved"].get("delete_record", 0)."""
     if isinstance(expect, str) and expect.startswith("$"):
         group, _, key = expect[1:].partition(".")
         return (facts.get(group) or {}).get(key, 0)

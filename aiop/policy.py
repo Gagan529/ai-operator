@@ -35,6 +35,8 @@ class PolicyEngine:
             return _d(Decision.ALLOW, None, "observe", "reading the page changes nothing")
         if action.tool == "note":
             return _d(Decision.ALLOW, None, "memory", "a note changes nothing outside the run")
+        if action.tool == "assign":
+            return _d(Decision.ALLOW, None, "compute", "assign only computes; its result goes into the notes")
         if action.tool == "goto":
             return self._navigation(urlparse(action.url or "").path)
         if action.tool in ("fill", "select"):

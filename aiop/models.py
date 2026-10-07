@@ -14,14 +14,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from aiop.assign import AssignItem, AssignSlot
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 # ---------- What the LLM may propose ----------
-Tool = Literal["goto", "click", "fill", "select", "submit_form", "read", "note", "done"]
-REF_TOOLS = ("click", "fill", "select")   # tools whose ref only means something on the current page
+Tool = Literal["goto", "click", "fill", "select", "submit_form", "read", "note", "assign", "done"]
+# Tools that still make sense after the page changed under them: they open their own page or only
+# compute. Anything else queued after a page change was written before the model saw the new page.
+PAGE_FREE_TOOLS = ("submit_form", "assign")
 
 
 class ProposedAction(BaseModel):
@@ -34,12 +38,14 @@ class ProposedAction(BaseModel):
     value: str | None = Field(None, description="text to type (fill), option label (select) or fact to remember (note)")
     fields: dict[str, str] | None = Field(None, description="submit_form: field name or label -> value")
     button: str | None = Field(None, description="submit_form: text of the submit button (optional if only one)")
+    items: list[AssignItem] | None = Field(None, description="assign: things to place (id, priority, allowed slots)")
+    slots: list[AssignSlot] | None = Field(None, description="assign: places to fill (id, order)")
     reason: str = Field("", description="one line: why this step, or the summary when tool=done")
 
     @model_validator(mode="after")
     def _needs_args(self) -> ProposedAction:
         need = {"goto": ["url"], "click": ["ref"], "fill": ["ref", "value"], "select": ["ref", "value"],
-                "note": ["value"], "submit_form": ["url", "fields"]}
+                "note": ["value"], "submit_form": ["url", "fields"], "assign": ["items", "slots"]}
         missing = [f for f in need.get(self.tool, []) if getattr(self, f) is None]
         if missing:
             raise ValueError(f"{self.tool} needs {', '.join(missing)}")
@@ -48,7 +54,9 @@ class ProposedAction(BaseModel):
     def key(self) -> str:
         """Stable identity used by the loop guard."""
         fields = ",".join(f"{k}={v}" for k, v in sorted((self.fields or {}).items()))
-        return f"{self.tool}|{self.ref}|{self.url}|{self.value}|{fields}|{self.button}"
+        placed = ",".join(f"{i.id}:{i.priority}:{'/'.join(i.slots)}" for i in self.items or [])
+        places = ",".join(f"{s.id}:{s.order}" for s in self.slots or [])
+        return f"{self.tool}|{self.ref}|{self.url}|{self.value}|{fields}|{self.button}|{placed}|{places}"
 
 
 class ActionBatch(BaseModel):

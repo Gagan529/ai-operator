@@ -15,7 +15,9 @@
 ## Policies (the operator must follow these)
 - **POLICY-1:** Never change a candidate to **Rejected** without approval from a human recruiter. Mark them "Not a fit (pending approval)" and ask.
 - **POLICY-2:** Book interviews only in a **free** slot of the role's interviewer. One candidate per slot.
-- **POLICY-3:** Book shortlisted candidates in order of years of experience (most first).
+- **POLICY-3:** Book shortlisted candidates in order of years of experience (most first). Use the `assign` tool for this:
+  one item per shortlisted candidate (priority = years of experience; slots = the interviewer's free slots),
+  slots ordered by start time. Then book exactly what it returns.
 - **POLICY-4:** Never email candidates directly. Booking in the calendar is enough.
 
 ## Done means
