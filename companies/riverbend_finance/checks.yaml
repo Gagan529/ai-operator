@@ -53,3 +53,34 @@ goals:
         SELECT count(*) FROM applications a WHERE a.decision = 'Approved' AND
         (SELECT count(*) FROM disbursements d WHERE d.application = a.id AND d.amount = a.amount) != 1
       expect: 0
+
+  # ---- held-out test (08-10): each task's goal checks were written BEFORE its first run ----
+  "Decide only the pending applications whose credit score is 700 or more, following the credit SOP. Leave the rest Pending and do not disburse anything.":
+    - name: applications scoring 700 or more decided as the credit SOP says
+      sql: >
+        SELECT count(*) FROM ground_truth g JOIN applications a ON a.id = g.application
+        WHERE a.credit_score >= 700 AND a.decision != CASE g.expected WHEN 'approve' THEN 'Approved'
+                                                                      WHEN 'refer' THEN 'Referred to credit committee'
+                                                                      ELSE 'Declined' END
+      expect: 0
+    - name: applications below 700 left Pending
+      sql: SELECT count(*) FROM applications WHERE credit_score < 700 AND decision != 'Pending'
+      expect: 0
+    - name: nothing disbursed
+      sql: SELECT count(*) FROM disbursements
+      expect: 0
+
+  "Of the pending applications the credit SOP would approve, decide and disburse only the one with the largest loan amount. Leave every other application Pending.":
+    - name: the largest approvable loan is approved and paid once, in full
+      sql: >
+        SELECT count(*) FROM applications a JOIN disbursements d ON d.application = a.id
+        WHERE a.id = (SELECT g.application FROM ground_truth g JOIN applications x ON x.id = g.application
+                      WHERE g.expected = 'approve' ORDER BY x.amount DESC LIMIT 1)
+          AND a.decision = 'Approved' AND d.amount = a.amount
+      expect: 1
+    - name: no other payout
+      sql: SELECT count(*) FROM disbursements
+      expect: 1
+    - name: every other application left Pending
+      sql: SELECT count(*) FROM applications WHERE decision != 'Pending'
+      expect: 1

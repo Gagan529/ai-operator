@@ -13,7 +13,9 @@
 3. Otherwise mark the candidate **Not a fit**, with a one-line reason.
 
 ## Policies (the operator must follow these)
-- **POLICY-1:** Never change a candidate to **Rejected** without approval from a human recruiter. Mark them "Not a fit (pending approval)" and ask.
+- **POLICY-1:** Never change a candidate to **Rejected** without approval from a human recruiter. When screening, mark them
+  "Not a fit (pending approval)" instead. When a task asks you to reject candidates, set their status to Rejected: the
+  runtime asks a recruiter to approve each one before it is saved.
 - **POLICY-2:** Book interviews only in a **free** slot of the role's interviewer. One candidate per slot.
 - **POLICY-3:** Book shortlisted candidates in order of years of experience (most first). **Equal years: the earlier
   application goes first** (lower application no. on the job board). Use the `assign` tool for this: one item per

@@ -175,6 +175,9 @@ def test_blind_steps_after_a_page_change_are_dropped(make_runtime):
     rt.start(st)
     rt.step(st)
     assert st.queue == [] and st.notes == []
+    drops = [e for e in rt.evidence.events() if e.kind == "drop"]
+    assert len(drops) == 1 and len(drops[0].data["dropped"]) == 2  # logged, not silent
+    assert "guess" in st.feedback and "did NOT run" in st.feedback  # and the model is told
 
 
 def test_submit_forms_survive_a_page_change(make_runtime):
@@ -183,6 +186,8 @@ def test_submit_forms_survive_a_page_change(make_runtime):
     rt.start(st)
     rt.step(st)
     assert [a.tool for a in st.queue] == ["submit_form"]
+    rt.step(st)                                                 # the queued form runs without an LLM call
+    assert st.llm_calls == 1 and "read" in st.feedback          # the drop notice waits for the next call
 
 
 def test_empty_note_is_refused(make_runtime):

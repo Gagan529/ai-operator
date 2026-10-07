@@ -72,11 +72,11 @@ class Runtime:
             finally:
                 self._tokens(state, "actions")
             state.llm_calls += 1
+            state.feedback = None            # the model has now seen it
             batch_size = len(state.queue)
         else:
             batch_size = 0
         action = state.queue.pop(0)
-        state.feedback = None
         tag = f"  [batch of {batch_size}]" if batch_size > 1 else ("  [from batch]" if batch_size == 0 else "")
         self._log(state, "propose", _describe(action) + tag, action.model_dump(exclude_none=True))
 
@@ -141,7 +141,13 @@ class Runtime:
             # the model has not seen the new page yet: refs, reads and notes queued now would be blind.
             # Keep only the leading actions that do not depend on it (submit_form, assign).
             cut = next((i for i, a in enumerate(state.queue) if a.tool not in PAGE_FREE_TOOLS), len(state.queue))
-            state.queue = state.queue[:cut]
+            state.queue, dropped = state.queue[:cut], state.queue[cut:]
+            if dropped:                      # say so, or the model believes they ran
+                said = "; ".join(_describe(a)[:120] for a in dropped)
+                self._log(state, "drop", f"dropped {len(dropped)} queued step(s) written before the page changed: {said}",
+                          {"dropped": [a.model_dump(exclude_none=True) for a in dropped]})
+                state.feedback = (f"{len(dropped)} of your queued steps did NOT run, because you wrote them before "
+                                  f"seeing this page: {said}. If they are still needed, propose them again now.")
         return state
 
     def _note(self, state: RunState, text: str) -> RunState:

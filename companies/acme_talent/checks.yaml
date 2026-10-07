@@ -68,3 +68,36 @@ goals:
         WHERE a.years = b.years AND a.application_no < b.application_no AND sa.start > sb.start
       expect: 0
       critical: false
+
+  # ---- held-out test (08-10): each task's goal checks were written BEFORE its first run ----
+  "Find the most experienced applicant for role R-21 who qualifies under the SOP's screening rule, and book their interview in Ritu Sharma's latest free slot. Leave every other applicant unchanged.":
+    - name: the most experienced qualified applicant is booked in the interviewer's latest free slot
+      sql: >
+        SELECT count(*) FROM candidates c
+        WHERE c.id = (SELECT g.candidate FROM ground_truth g JOIN candidates x ON x.id = g.candidate
+                      WHERE g.expected = 'shortlist' ORDER BY x.years DESC, x.application_no LIMIT 1)
+          AND c.status = 'Interview Scheduled'
+          AND c.slot = (SELECT s.id FROM slots s JOIN roles r ON r.interviewer = s.interviewer
+                        WHERE r.id = 'R-21' AND s.status != 'busy' ORDER BY s.start DESC LIMIT 1)
+      expect: 1
+    - name: only one interview booked
+      sql: SELECT count(*) FROM slots WHERE status = 'booked'
+      expect: 1
+    - name: every other applicant left unchanged
+      sql: SELECT count(*) FROM candidates WHERE status != 'Applied'
+      expect: 1
+
+  "Reject every applicant for role R-21 who has fewer years of experience than the role's minimum, with the reason in the note. Leave every other applicant unchanged.":
+    - name: every applicant below the minimum years rejected
+      sql: >
+        SELECT count(*) FROM candidates c JOIN roles r ON r.id = c.role
+        WHERE c.years < r.min_years AND c.status != 'Rejected'
+      expect: 0
+    - name: every rejection has a reason in the note
+      sql: SELECT count(*) FROM candidates WHERE status = 'Rejected' AND trim(coalesce(note, '')) = ''
+      expect: 0
+    - name: every other applicant left unchanged
+      sql: >
+        SELECT count(*) FROM candidates c JOIN roles r ON r.id = c.role
+        WHERE c.years >= r.min_years AND c.status != 'Applied'
+      expect: 0
