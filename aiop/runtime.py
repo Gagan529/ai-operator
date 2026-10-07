@@ -9,6 +9,7 @@ The runtime works without LangGraph: `run_until_blocked()` is a plain loop.
 """
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from urllib.parse import urlparse
@@ -64,7 +65,7 @@ class Runtime:
         state.step += 1
         if not state.queue:                  # ask the LLM only when the last batch is used up
             try:
-                state.queue = self._propose(state)
+                state.queue = self.proposer.propose_actions(self._ctx(state))
             except (ProposalError, ValueError) as e:
                 kind = FailureKind.TRANSIENT if getattr(e, "transient", False) else FailureKind.INVALID_ACTION
                 return self._failed(state, Failure(kind=kind, message=str(e)[:300]))
@@ -75,7 +76,6 @@ class Runtime:
         else:
             batch_size = 0
         action = state.queue.pop(0)
-        state.pending_action = action
         state.feedback = None
         tag = f"  [batch of {batch_size}]" if batch_size > 1 else ("  [from batch]" if batch_size == 0 else "")
         self._log(state, "propose", _describe(action) + tag, action.model_dump(exclude_none=True))
@@ -143,11 +143,6 @@ class Runtime:
             cut = next((i for i, a in enumerate(state.queue) if a.tool not in PAGE_FREE_TOOLS), len(state.queue))
             state.queue = state.queue[:cut]
         return state
-
-    def _propose(self, state: RunState) -> list[ProposedAction]:
-        ctx = self._ctx(state)
-        many = getattr(self.proposer, "propose_actions", None)
-        return list(many(ctx)) if many else [self.proposer.propose_action(ctx)]
 
     def _note(self, state: RunState, text: str) -> RunState:
         """Working memory: facts the model will need on later pages. Kept small and capped."""
@@ -288,26 +283,28 @@ class Runtime:
         return b.read()
 
     # ---------- verification ----------
-    def _check(self, state: RunState) -> VerificationResult:
-        return self.verifier.run({"approved": state.approved}, self.company.goal_checks(state.task))
-
-    def _verify(self, state: RunState, claim: str) -> RunState:
-        result = self._check(state)
+    def _check(self, state: RunState, said: str) -> VerificationResult:
+        """Run the data checks, keep them as evidence and log the verdict."""
+        result = self.verifier.run({"approved": state.approved}, self.company.goal_checks(state.task))
         state.verification = result.outcome
         state.verification_ref = self.evidence.save_json(f"verification-{state.step:03d}.json",
                                                          result.model_dump(mode="json"))
-        failed = [c for c in result.checks if not c.passed]
-        self._log(state, "verify", f"agent claimed done ({claim!r}); verifier says {result.outcome.value}"
-                                   + (f": {len(failed)} check(s) failed" if failed else ""),
-                  {"outcome": result.outcome.value, "failed": [c.name for c in failed]},
-                  artifact=state.verification_ref)
+        failed = [c.name for c in result.checks if not c.passed]
+        self._log(state, "verify", f"{said} {result.outcome.value}"
+                  + (f": {len(failed)} check(s) failed" if failed else ""),
+                  {"outcome": result.outcome.value, "failed": failed}, artifact=state.verification_ref)
+        return result
+
+    def _verify(self, state: RunState, claim: str) -> RunState:
+        result = self._check(state, f"agent claimed done ({claim!r}); verifier says")
         if result.outcome == Outcome.PASS:
             return self._finish(state, RunStatus.VERIFIED, "all verification checks passed", result)
         if result.outcome == Outcome.UNVERIFIED:
             return self._finish(state, RunStatus.UNVERIFIED, "invariants hold, but this task has no goal checks, "
                                 "so the result is not machine-verified; see the evidence", result)
-        detail = "; ".join(f"{c.name} (expected {c.expected}, found {c.actual})" for c in failed)
-        if result.outcome == Outcome.PARTIAL and not any(c.critical for c in failed):
+        detail = "; ".join(f"{c.name} (expected {c.expected}, found {c.actual})"
+                           for c in result.checks if not c.passed)
+        if result.outcome == Outcome.PARTIAL:
             return self._finish(state, RunStatus.VERIFIED, f"verified with warnings: {detail}", result)
         return self._failed(state, Failure(kind=FailureKind.VERIFICATION_FAILURE,
                                            message=f"verification {result.outcome.value}: {detail}"),
@@ -343,25 +340,16 @@ class Runtime:
                 result: VerificationResult | None) -> RunState:
         state.status = status
         state.stop_reason = reason
-        state.pending_action = None
         state.queue = []
         if result is None and state.verification is None:
             # The agent never said done, but the report must still tell the truth about the data.
-            result = self._check(state)
-            state.verification = result.outcome
-            state.verification_ref = self.evidence.save_json(f"verification-{state.step:03d}.json",
-                                                             result.model_dump(mode="json"))
-            failed = [c.name for c in result.checks if not c.passed]
-            self._log(state, "verify", f"run ended before the agent said done; data check says {result.outcome.value}"
-                      + (f": {len(failed)} check(s) failed" if failed else ""),
-                      {"outcome": result.outcome.value, "failed": failed}, artifact=state.verification_ref)
+            result = self._check(state, "run ended before the agent said done; data check says")
             reason = f"{reason} (data check: {result.outcome.value})"
             state.stop_reason = reason
         after = self.verifier.snapshot_db()
         self.evidence.save_json("db_after.json", after)
         before_path = self.evidence.dir / "db_before.json"
         if before_path.exists():
-            import json
             self.evidence.save_json("db_diff.json",
                                     self.evidence.db_diff(json.loads(before_path.read_text(encoding="utf-8")), after))
         try:

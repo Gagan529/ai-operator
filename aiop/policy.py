@@ -29,8 +29,7 @@ class PolicyEngine:
         self.unknown_effect = Decision(defaults.get("unknown_effect", "APPROVAL_REQUIRED"))
         self.unknown_submit = Decision(defaults.get("unknown_submit", "APPROVAL_REQUIRED"))
 
-    def decide(self, action: ProposedAction, target: Target | None = None,
-               current_url: str = "") -> PolicyDecision:
+    def decide(self, action: ProposedAction, target: Target | None = None) -> PolicyDecision:
         if action.tool in ("read", "done"):
             return _d(Decision.ALLOW, None, "observe", "reading the page changes nothing")
         if action.tool == "note":

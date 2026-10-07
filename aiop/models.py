@@ -172,7 +172,7 @@ class VerificationResult(BaseModel):
     checks: list[VerificationCheck]
 
     @classmethod
-    def from_checks(cls, checks: list[VerificationCheck], goal_checked: bool = True) -> VerificationResult:
+    def from_checks(cls, checks: list[VerificationCheck], goal_checked: bool) -> VerificationResult:
         """FAIL: a critical check failed. UNVERIFIED: nothing critical failed, but no goal was checked.
         PASS: all passed. PARTIAL: only non-critical ones failed."""
         if any(c.critical and not c.passed for c in checks):
@@ -233,7 +233,6 @@ class RunState(BaseModel):
     plan: list[str] = []
     step: int = 0
     status: RunStatus = RunStatus.RUNNING
-    pending_action: ProposedAction | None = None
     queue: list[ProposedAction] = []       # rest of the current batch, still to be checked and run
     completed: list[str] = []              # business changes the runtime saw succeed (shown as "don't repeat")
     denied: list[str] = []                 # changes a human denied: final, shown every step, refused if proposed again

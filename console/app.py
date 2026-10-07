@@ -128,7 +128,7 @@ def companies():
             c = Company.load(folder.name)
             out.append({"id": c.id, "name": c.name, "task": c.default_task, "sop": c.sop,
                         "policies": (c.folder / "policies.yaml").read_text(encoding="utf-8"),
-                        "checks": [ch["name"] for ch in c.checks],
+                        "checks": [ch["name"] for ch in c.invariants + (c.goal_checks(c.default_task) or [])],
                         "scripted": (c.folder / "scripted.py").exists()})
     return out
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from aiop.browser import ActionFailed, BrowserError, DomainNotAllowed, MissingElement
+from aiop.browser import BrowserError, DomainNotAllowed, MissingElement
 from aiop.models import Failure, FailureKind, RunState, ToolResult
 
 MAX_FAILURES_IN_ROW = 3
@@ -33,14 +33,12 @@ class Recovery:
     delay_s: float = 0.0
 
 
-def classify_exception(e: Exception) -> Failure:
+def classify_exception(e: BrowserError) -> Failure:
     if isinstance(e, MissingElement):
         return Failure(kind=FailureKind.MISSING_ELEMENT, message=str(e))
     if isinstance(e, DomainNotAllowed):
         return Failure(kind=FailureKind.POLICY_VIOLATION, message=str(e))
-    if isinstance(e, (ActionFailed, BrowserError)):
-        return Failure(kind=FailureKind.INVALID_ACTION, message=str(e))
-    return Failure(kind=FailureKind.INVALID_ACTION, message=f"{type(e).__name__}: {e}")
+    return Failure(kind=FailureKind.INVALID_ACTION, message=str(e))
 
 
 def classify_result(r: ToolResult) -> Failure | None:

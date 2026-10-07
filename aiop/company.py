@@ -35,11 +35,6 @@ class Company:
         """The goal checks for this exact task, or None: an unknown task cannot be VERIFIED."""
         return self.goals.get(_norm(task))
 
-    @property
-    def checks(self) -> list[dict[str, Any]]:
-        """Everything checked for the default task (for display)."""
-        return self.invariants + (self.goal_checks(self.default_task) or [])
-
     def module(self, name: str) -> ModuleType | None:
         """An optional Python file in the company folder, e.g. scripted.py for offline replays."""
         path = self.folder / f"{name}.py"

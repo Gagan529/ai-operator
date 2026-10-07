@@ -91,9 +91,6 @@ class ScriptedProposer:
         out = step(ctx.snapshot) if callable(step) else step
         return list(out) if isinstance(out, list) else [out]
 
-    def propose_action(self, ctx: Context) -> ProposedAction:
-        return self.propose_actions(ctx)[0]
-
 
 # ---------- live model ----------
 SYSTEM = """You operate a company's internal web apps for a human team, through a browser.
@@ -157,8 +154,7 @@ class OpenAICompatibleProposer:
     LLM_REASONING_EFFORT (default "low"; empty = don't send it), LLM_MIN_INTERVAL_S
     (pause between calls, to stay under a free tier's requests-per-minute), LLM_MAX_RETRIES."""
 
-    def __init__(self, base_url: str | None = None, api_key: str | None = None,
-                 model: str | None = None, temperature: float = 0.0, client=None):
+    def __init__(self, api_key: str | None = None, model: str | None = None, client=None):
         from dotenv import load_dotenv
         load_dotenv()
         self.model = model or os.getenv("LLM_MODEL")
@@ -168,10 +164,9 @@ class OpenAICompatibleProposer:
                 raise ProposalError("LLM_MODEL and LLM_API_KEY must be set in .env")
             from openai import OpenAI
             # the SDK retries 429/5xx itself with backoff (and honours Retry-After)
-            client = OpenAI(base_url=base_url or os.getenv("LLM_BASE_URL") or None, api_key=key,
+            client = OpenAI(base_url=os.getenv("LLM_BASE_URL") or None, api_key=key,
                             max_retries=int(os.getenv("LLM_MAX_RETRIES", "6")), timeout=60)
         self.client = client
-        self.temperature = temperature
         self.reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "low").strip()
         self.min_interval = float(os.getenv("LLM_MIN_INTERVAL_S", "0") or 0)
         self._last_call = 0.0
@@ -200,9 +195,6 @@ class OpenAICompatibleProposer:
             parts.append(f"RUNTIME FEEDBACK ON YOUR LAST PROPOSAL:\n{ctx.feedback}")
         parts.append(f"LATEST SNAPSHOT:\n{ctx.snapshot}")
         return self._ask(SYSTEM, "\n\n".join(parts), _parse_actions)
-
-    def propose_action(self, ctx: Context) -> ProposedAction:
-        return self.propose_actions(ctx)[0]
 
     def _ask(self, system: str, user: str, schema):
         """`schema` is a pydantic model or a parse function; one repair attempt, then give up."""
@@ -253,7 +245,7 @@ class OpenAICompatibleProposer:
         extra = {"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}
         try:
             return self.client.chat.completions.create(
-                model=self.model, messages=messages, temperature=self.temperature,
+                model=self.model, messages=messages, temperature=0,
                 response_format={"type": "json_object"}, **extra)
         except (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError,
                 openai.InternalServerError) as e:

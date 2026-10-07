@@ -20,6 +20,7 @@ from playwright.sync_api import Page, Playwright, Response, sync_playwright
 from aiop.models import Observation, Target, ToolResult
 
 MAX_SNAPSHOT_CHARS = 8000
+TIMEOUT_MS = 8000
 
 
 class BrowserError(Exception):
@@ -178,12 +179,11 @@ def _option_label(loc, value: str, name: str) -> str:
 class Browser:
     """A Playwright page restricted to the company's allowed origins."""
 
-    def __init__(self, allowed_origins: list[str], headless: bool = True, timeout_ms: int = 8000):
+    def __init__(self, allowed_origins: list[str], headless: bool = True):
         if not allowed_origins:
             raise ValueError("at least one allowed origin is required")
         self.allowed = [o.rstrip("/") for o in allowed_origins]
         self.headless = headless
-        self.timeout_ms = timeout_ms
         self._pw: Playwright | None = None
         self._browser: PWBrowser | None = None
         self._page: Page | None = None
@@ -195,7 +195,7 @@ class Browser:
         self._browser = self._pw.chromium.launch(headless=self.headless)
         ctx = self._browser.new_context(accept_downloads=False)
         self._page = ctx.new_page()
-        self._page.set_default_timeout(self.timeout_ms)
+        self._page.set_default_timeout(TIMEOUT_MS)
         self._page.on("response", self._on_response)
         return self
 
