@@ -1,0 +1,16 @@
+# Metadata and wiring only. Business rules live in SOP.md, policies.yaml and checks.yaml.
+id: riverbend_finance
+name: Riverbend Home Finance (fictional)
+origins:                      # the only sites the operator may open
+  - http://127.0.0.1:8002
+start_url: /
+db: runs/riverbend_finance.db # read by the verifier only, never by the operator
+sop: SOP.md
+policies: policies.yaml
+checks: checks.yaml
+demo:                         # local demo wiring for the console
+  mock_app: mockapps.loans:app
+  reset: /admin/reset         # machine endpoint; the operator itself is denied it (policies.yaml)
+default_task: >
+  Process every pending application in the loan queue following the credit SOP:
+  record a decision for each one, then disburse the approved loans.

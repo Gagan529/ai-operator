@@ -11,7 +11,7 @@ from aiop.company import Company
 from aiop.evidence import EvidenceStore
 from aiop.llm import ScriptedProposer
 from aiop.runtime import Runtime
-from mockapps import recruiting
+from mockapps import loans, recruiting
 
 PORT = 8011
 BASE = f"http://127.0.0.1:{PORT}"
@@ -53,6 +53,45 @@ def make_runtime(company, browser, tmp_path):
     def make(steps, task=None):
         state = Runtime.new_state(company, task)
         rt = Runtime(company, browser, ScriptedProposer(steps), EvidenceStore(state.run_id, root=tmp_path),
+                     sleep=lambda s: None)
+        return rt, state
+    return make
+
+
+# ---------- the second company: Riverbend Home Finance (loans), same core ----------
+LOANS_PORT = 8012
+LOANS = f"http://127.0.0.1:{LOANS_PORT}"
+
+
+@pytest.fixture(scope="session")
+def loans_server():
+    loans.reset()
+    srv = uvicorn.Server(uvicorn.Config(loans.app, host="127.0.0.1", port=LOANS_PORT, log_level="warning"))
+    t = threading.Thread(target=srv.run, daemon=True)
+    t.start()
+    while not srv.started:
+        time.sleep(0.05)
+    yield LOANS
+    srv.should_exit = True
+    t.join(timeout=5)
+
+
+@pytest.fixture
+def loans_company(loans_server, browser):
+    """The session browser, pointed at the lender for this test (one Playwright per thread)."""
+    loans.reset()
+    loans.load_faults(flaky=False, silent_fail=False, injection=False)
+    saved = browser.allowed
+    browser.allowed = [loans_server]
+    yield Company.load("riverbend_finance", origins=[loans_server])
+    browser.allowed = saved
+
+
+@pytest.fixture
+def make_loans_runtime(loans_company, browser, tmp_path):
+    def make(steps, task=None):
+        state = Runtime.new_state(loans_company, task)
+        rt = Runtime(loans_company, browser, ScriptedProposer(steps), EvidenceStore(state.run_id, root=tmp_path),
                      sleep=lambda s: None)
         return rt, state
     return make

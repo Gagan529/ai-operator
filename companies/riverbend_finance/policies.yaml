@@ -1,0 +1,40 @@
+# Deterministic policy for Riverbend Home Finance. The effect of a submit comes from
+# the page itself (data-aiop-effect, set by the lender's own systems), never from the LLM.
+# Decisions: ALLOW | APPROVAL_REQUIRED | DENY
+
+effects:
+  approve_loan: ALLOW
+  refer_loan: ALLOW
+  decline_loan: ALLOW
+  approve_large_loan:
+    decision: APPROVAL_REQUIRED
+    reason: "CREDIT-2: approving a loan above INR 40 lakh needs a credit officer's sign-off"
+  disburse_loan:
+    decision: APPROVAL_REQUIRED
+    reason: "CREDIT-5: money leaves the lender; a human checker releases every disbursement"
+  disburse_unverified:
+    decision: DENY
+    reason: "CREDIT-4: never disburse while any document is not verified"
+  disburse_over_funds:
+    decision: DENY
+    reason: "CREDIT-7: never disburse more than today's available funds"
+
+# For pages that carry no data-aiop-effect: match the submitted form instead (strictest reading).
+fallback_rules:
+  - name: los-approved
+    method: post
+    action: /los/application/*
+    fields: {decision: Approved}
+    effect: approve_large_loan
+  - name: disbursement
+    method: post
+    action: /disburse/*
+    effect: disburse_loan
+
+# Pages the operator must never open (machine endpoints).
+deny_paths:
+  - /admin/*
+
+defaults:
+  unknown_effect: APPROVAL_REQUIRED
+  unknown_submit: APPROVAL_REQUIRED

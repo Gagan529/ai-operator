@@ -1,0 +1,63 @@
+{
+  "company": "Riverbend Home Finance (fictional)",
+  "large_loan_above": 4000000,
+  "available_funds": 10000000,
+  "applications": [
+    {
+      "id": "L-301", "applicant": "Priya Raman", "email": "priya.r@example.com",
+      "purpose": "Purchase of a 2BHK flat", "amount": 1800000, "tenure_months": 180,
+      "monthly_income": 95000, "emi": 21000, "credit_score": 762, "remarks": "Salaried, 6 years with current employer.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "approve"
+    },
+    {
+      "id": "L-302", "applicant": "Vikram Sethi", "email": "vikram.s@example.com",
+      "purpose": "Purchase of an independent house", "amount": 4500000, "tenure_months": 240,
+      "monthly_income": 210000, "emi": 52000, "credit_score": 781, "remarks": "Self-employed architect, ITR for 3 years.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "approve"
+    },
+    {
+      "id": "L-303", "applicant": "Sunita Pillai", "email": "sunita.p@example.com",
+      "purpose": "Home extension", "amount": 1200000, "tenure_months": 96,
+      "monthly_income": 40000, "emi": 19500, "credit_score": 705, "remarks": "Salaried, teacher.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "refer"
+    },
+    {
+      "id": "L-304", "applicant": "Rohit Bansal", "email": "rohit.b@example.com",
+      "purpose": "Purchase of a flat", "amount": 2500000, "tenure_months": 240,
+      "monthly_income": 85000, "emi": 30000, "credit_score": 640, "remarks": "Two late card payments last year.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "decline"
+    },
+    {
+      "id": "L-305", "applicant": "Kavya Menon", "email": "kavya.m@example.com",
+      "purpose": "Purchase of a flat", "amount": 2000000, "tenure_months": 180,
+      "monthly_income": 110000, "emi": 24000, "credit_score": 735, "remarks": "Recently changed jobs; new salary slips awaited.",
+      "documents": {"ID proof": "Verified", "Income proof": "Pending", "Property papers": "Verified"},
+      "expected": "refer"
+    },
+    {
+      "id": "L-306", "applicant": "Imran Qureshi", "email": "imran.q@example.com",
+      "purpose": "Plot purchase and construction", "amount": 3000000, "tenure_months": 180,
+      "monthly_income": 70000, "emi": 37500, "credit_score": 720, "remarks": "Salaried, existing car loan.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "decline"
+    },
+    {
+      "id": "L-307", "applicant": "Neha Bhatt", "email": "neha.b@example.com",
+      "purpose": "Purchase of a flat", "amount": 1500000, "tenure_months": 180,
+      "monthly_income": 90000, "emi": 18000, "credit_score": 690, "remarks": "Salaried, first home loan.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "refer"
+    },
+    {
+      "id": "L-308", "applicant": "Arvind Kulkarni", "email": "arvind.k@example.com",
+      "purpose": "Purchase of a row house", "amount": 2800000, "tenure_months": 240,
+      "monthly_income": 80000, "emi": 32000, "credit_score": 700, "remarks": "Salaried, government employee.",
+      "documents": {"ID proof": "Verified", "Income proof": "Verified", "Property papers": "Verified"},
+      "expected": "approve"
+    }
+  ]
+}
