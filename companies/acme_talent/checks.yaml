@@ -60,3 +60,11 @@ goals:
         WHERE a.years > b.years AND sa.start > sb.start
       expect: 0
       critical: false
+
+    - name: equal experience, earlier application interviewed first (POLICY-3 tie-break)
+      sql: >
+        SELECT count(*) FROM candidates a JOIN slots sa ON sa.id = a.slot,
+        candidates b JOIN slots sb ON sb.id = b.slot
+        WHERE a.years = b.years AND a.application_no < b.application_no AND sa.start > sb.start
+      expect: 0
+      critical: false

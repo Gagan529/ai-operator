@@ -67,7 +67,7 @@ def reset() -> None:
         CREATE TABLE roles (id TEXT PRIMARY KEY, title TEXT, must_have TEXT, nice_to_have TEXT,
                             min_years INT, interviewer TEXT);
         CREATE TABLE candidates (id TEXT PRIMARY KEY, role TEXT, name TEXT, years INT, email TEXT,
-                                 resume TEXT, status TEXT, note TEXT, slot TEXT);
+                                 resume TEXT, status TEXT, note TEXT, slot TEXT, application_no INT);
         CREATE TABLE slots (id TEXT PRIMARY KEY, interviewer TEXT, start TEXT, status TEXT, candidate TEXT);
         CREATE TABLE audit (ts DATETIME DEFAULT CURRENT_TIMESTAMP, system TEXT, action TEXT);
         -- the company's own labelled outcome per applicant; read by the verifier only, never rendered
@@ -77,8 +77,9 @@ def reset() -> None:
         con.execute("INSERT INTO roles VALUES (?,?,?,?,?,?)", (r["id"], r["title"], ", ".join(r["must_have"]),
                     ", ".join(r["nice_to_have"]), r["min_years"], r["interviewer"]))
     for a in seed["applicants"]:
-        con.execute("INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?,?)",
-                    (a["id"], a["role"], a["name"], a["years"], a["email"], a["resume"], "Applied", "", None))
+        con.execute("INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (a["id"], a["role"], a["name"], a["years"], a["email"], a["resume"], "Applied", "", None,
+                     a.get("application_no")))
         con.execute("INSERT INTO ground_truth VALUES (?,?)", (a["id"], a["expected"]))
     for s in seed["calendar_slots"]:
         con.execute("INSERT INTO slots VALUES (?,?,?,?,?)", (s["id"], s["interviewer"], s["start"], s["status"], None))
@@ -120,9 +121,10 @@ def jobs():
     rows = con.execute("SELECT c.*, r.title FROM candidates c JOIN roles r ON r.id=c.role ORDER BY c.id").fetchall()
     con.close()
     trs = "".join(f"<tr><td>{e(r['id'])}</td><td>{e(r['name'])}</td><td>{e(r['title'])} ({e(r['role'])})</td>"
-                  f"<td>{e(r['years'])}</td><td>{e(resume_text(r))}</td></tr>" for r in rows)
+                  f"<td>{e(r['years'])}</td><td>{e(r['application_no'])}</td><td>{e(resume_text(r))}</td></tr>"
+                  for r in rows)
     return page("Job board: applications", "<table><tr><th>Applicant</th><th>Name</th><th>Role</th>"
-                f"<th>Years</th><th>Resume</th></tr>{trs}</table>")
+                f"<th>Years</th><th>Application no.</th><th>Resume</th></tr>{trs}</table>")
 
 
 # ---------- ATS: roles and candidate pipeline ----------

@@ -1,7 +1,10 @@
 """The `assign` tool: give items limited slots, most important first. Pure computation.
 
 Input: items (id, priority, allowed slots) and slots (id, order). Higher priority =
-more important; lower order = earlier slot. Equal priorities keep the input order.
+more important; lower order = earlier slot. A priority may be a list, compared left to
+right, so a company can state its own tie-break (e.g. [years, -application number]).
+Items that are still equal keep the input order, and if that order changed the
+result, the answer says so: a tie is a business decision, never made silently here.
 
 Two passes, both built on one question: "can this set of items all get a slot at once?"
 (a bipartite matching, answered with augmenting paths: give the new item a free slot,
@@ -26,7 +29,8 @@ MAX_SLOTS = 200
 class AssignItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
-    priority: float = Field(0, description="higher = more important")
+    priority: float | list[float] = Field(0, description="higher = more important; a list is compared "
+                                                           "left to right (later numbers break ties)")
     slots: list[str] = Field(description="ids of the slots this item may take")
 
 
@@ -39,12 +43,15 @@ class AssignSlot(BaseModel):
 class AssignResult(BaseModel):
     assigned: dict[str, str]            # item id -> slot id, in priority order
     unassigned: dict[str, str]          # item id -> why it got no slot
+    ties: list[list[str]] = []          # equal-priority groups whose input order changed the result
 
     def summary(self) -> str:
         """One line for the model's notes."""
         got = ", ".join(f"{i}->{s}" for i, s in self.assigned.items()) or "none"
         left = "; ".join(f"{i}: {why}" for i, why in self.unassigned.items())
-        return f"assign result: {got}" + (f". Not placed: {left}" if left else "")
+        tie = "; ".join(", ".join(g) for g in self.ties)
+        return (f"assign result: {got}" + (f". Not placed: {left}" if left else "")
+                + (f". TIE decided only by input order (equal priority): {tie}" if tie else ""))
 
 
 def assign(items: list[AssignItem], slots: list[AssignSlot]) -> AssignResult:
@@ -53,8 +60,25 @@ def assign(items: list[AssignItem], slots: list[AssignSlot]) -> AssignResult:
     rank = {s.id: (s.order, i) for i, s in enumerate(slots)}
     # allowed slots of each item, earliest first, duplicates dropped
     allowed = {it.id: sorted(set(it.slots), key=rank.__getitem__) for it in items}
-    by_priority = [it.id for it in sorted(items, key=lambda it: -it.priority)]   # stable for ties
+    key = {it.id: tuple(-x for x in _numbers(it.priority)) for it in items}
+    by_priority = sorted((it.id for it in items), key=key.__getitem__)          # stable for ties
+    fixed, unassigned = _solve(by_priority, allowed)
 
+    # a tie mattered if reversing that group's input order changes the answer
+    groups: dict[tuple, list[str]] = {}
+    for item in by_priority:
+        groups.setdefault(key[item], []).append(item)
+    ties = []
+    for group in (g for g in groups.values() if len(g) > 1):
+        flipped = [x for x in by_priority if x not in group]
+        at = by_priority.index(group[0])
+        flipped[at:at] = group[::-1]
+        if _solve(flipped, allowed)[0] != fixed:
+            ties.append(group)
+    return AssignResult(assigned=fixed, unassigned=unassigned, ties=ties)
+
+
+def _solve(by_priority: list[str], allowed: dict[str, list[str]]) -> tuple[dict[str, str], dict[str, str]]:
     # pass 1: who gets in
     kept: list[str] = []
     unassigned: dict[str, str] = {}
@@ -78,7 +102,11 @@ def assign(items: list[AssignItem], slots: list[AssignSlot]) -> AssignResult:
                 break
         else:                           # cannot happen: pass 1 proved `kept` fits
             raise AssertionError(f"no slot left for {item}")
-    return AssignResult(assigned=fixed, unassigned=unassigned)
+    return fixed, unassigned
+
+
+def _numbers(priority: float | list[float]) -> list[float]:
+    return list(priority) if isinstance(priority, list) else [priority]
 
 
 def _augment(item: str, allowed: dict[str, list[str]], match: dict[str, str], seen: set[str],
@@ -110,6 +138,9 @@ def _check(items: list[AssignItem], slots: list[AssignSlot]) -> None:
         dupes = sorted({x for x in ids if ids.count(x) > 1})
         if dupes:
             raise ValueError(f"duplicate {kind} ids: {', '.join(dupes)}")
+    lengths = {len(_numbers(i.priority)) for i in items}
+    if len(lengths) > 1:
+        raise ValueError("every priority must have the same length (one number, or lists of equal length)")
     known = {s.id for s in slots}
     unknown = sorted({s for it in items for s in it.slots if s not in known})
     if unknown:

@@ -4,13 +4,13 @@ import random
 
 import pytest
 
-from aiop.assign import AssignItem as I, AssignSlot as S, assign
+from aiop.assign import AssignItem as I, AssignSlot as S, _numbers, assign
 
 
 def brute_force(items, slots):
     """Try every assignment. Best = keep the most important items first (compared item by item
     in priority order), then give each, in the same order, the earliest slot."""
-    order = sorted(range(len(items)), key=lambda k: -items[k].priority)
+    order = sorted(range(len(items)), key=lambda k: [-x for x in _numbers(items[k].priority)])
     rank = {s.id: (s.order, i) for i, s in enumerate(slots)}
     best, best_key = None, None
     for choice in itertools.product(*[[None, *sorted(set(it.slots))] for it in items]):
@@ -39,6 +39,16 @@ def test_matches_brute_force_on_random_cases():
         got = assign(items, slots)
         assert got.assigned == brute_force(items, slots), (items, slots)
         assert set(got.assigned) | set(got.unassigned) == {it.id for it in items}
+
+
+def test_list_priorities_match_brute_force():
+    """A company tie-break, e.g. [years, -application number], compared left to right."""
+    rng = random.Random(3)
+    for _ in range(300):
+        items, slots = random_case(rng)
+        for it in items:
+            it.priority = [rng.choice([1, 2, 3]), rng.choice([-2, -1])]
+        assert assign(items, slots).assigned == brute_force(items, slots)
 
 
 def test_kept_set_has_the_highest_total_priority():
@@ -101,3 +111,29 @@ def test_more_items_than_slots():
 def test_bad_input_is_rejected_with_a_reason(items, slots, msg):
     with pytest.raises(ValueError, match=msg):
         assign(items, slots)
+
+
+def test_tie_that_decides_the_outcome_is_flagged():
+    slots = [S(id="T1", order=1)]
+    items = [I(id="A", priority=3, slots=["T1"]), I(id="B", priority=3, slots=["T1"])]
+    got = assign(items, slots)
+    assert got.assigned == {"A": "T1"} and got.ties == [["A", "B"]]
+    assert "TIE decided only by input order" in got.summary()
+
+
+def test_tie_that_changes_nothing_is_not_flagged():
+    slots = [S(id="T1", order=1), S(id="T2", order=2)]
+    items = [I(id="A", priority=3, slots=["T1"]), I(id="B", priority=3, slots=["T2"])]
+    assert assign(items, slots).ties == []
+
+
+def test_company_tie_break_settles_the_tie():
+    slots = [S(id="T1", order=1), S(id="T2", order=2)]
+    items = [I(id="A", priority=[3, -5], slots=["T1", "T2"]), I(id="B", priority=[3, -2], slots=["T1", "T2"])]
+    got = assign(items, slots)                       # B applied earlier (no. 2 before no. 5)
+    assert got.assigned == {"B": "T1", "A": "T2"} and got.ties == []
+
+
+def test_priorities_of_different_lengths_are_refused():
+    with pytest.raises(ValueError, match="same length"):
+        assign([I(id="A", priority=[1, 2], slots=[]), I(id="B", priority=1, slots=[])], [S(id="T1")])

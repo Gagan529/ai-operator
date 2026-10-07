@@ -21,10 +21,10 @@ def book(slot: str, cid: str) -> list:
             lambda s: A(tool="click", ref=find_ref(s, r'button "Book"'), reason=f"book {slot} for {cid}")]
 
 
-# Shortlisted R-21 candidates by years (priority) and Ritu Sharma's free slots by start time.
-PLACE = A(tool="assign", reason="order interviews by experience",
-          items=[{"id": cid, "priority": years, "slots": ["S-11", "S-13", "S-16", "S-17", "S-18"]}
-                 for cid, years in [("A-201", 6), ("A-203", 3), ("A-206", 7), ("A-207", 3)]],
+# Shortlisted R-21 candidates by [years, -application no.] and Ritu Sharma's free slots by start time.
+PLACE = A(tool="assign", reason="order interviews by experience, earlier application first on a tie",
+          items=[{"id": cid, "priority": [years, -no], "slots": ["S-11", "S-13", "S-16", "S-17", "S-18"]}
+                 for cid, years, no in [("A-201", 6, 3), ("A-203", 3, 7), ("A-206", 7, 5), ("A-207", 3, 2)]],
           slots=[{"id": s, "order": n} for n, s in enumerate(["S-11", "S-13", "S-16", "S-17", "S-18"])])
 
 
@@ -36,7 +36,7 @@ def screening() -> list:
     for cid in ["A-202", "A-204", "A-205", "A-208"]:
         steps += set_status(cid, "Not a fit (pending approval)", "missing must-haves")
     steps += [PLACE]
-    steps += book("S-11", "A-206") + book("S-13", "A-201") + book("S-16", "A-203") + book("S-17", "A-207")
+    steps += book("S-11", "A-206") + book("S-13", "A-201") + book("S-16", "A-207") + book("S-17", "A-203")
     return steps
 
 

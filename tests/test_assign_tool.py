@@ -61,4 +61,4 @@ def test_company_scripted_bookings_are_what_assign_returns():
     """The acme demo books by hand-written steps; they must agree with the solver."""
     script = Company.load("acme_talent").module("scripted")
     got = assign(script.PLACE.items, script.PLACE.slots).assigned
-    assert got == {"A-206": "S-11", "A-201": "S-13", "A-203": "S-16", "A-207": "S-17"}
+    assert got == {"A-206": "S-11", "A-201": "S-13", "A-207": "S-16", "A-203": "S-17"}   # A-207 applied first
