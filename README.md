@@ -149,11 +149,30 @@ seen, each run once.
 |---|---|---|
 | `FLAKY` | the first booking or payout returns HTTP 503 | classified as transient, retried with backoff, succeeds |
 | `SILENT_FAIL` | the app shows success but writes nothing | the verifier fails the run although the agent says done |
-| `INJECTION` | one applicant's resume or one loan's remarks carry planted instructions aimed at the AI | the policy still decides by effect; a fooled proposal is contained |
+| `INJECTION` | one applicant's resume or one loan's remarks carry planted instructions aimed at the AI | the text is fenced as untrusted, the planted instruction is detected and its record quarantined (any change to it needs a human), and the policy still decides by effect |
+
+Live runs with `INJECTION` on (09-10, free model): Acme VERIFIED 9/9 and Riverbend VERIFIED 8/8, both with and without
+the defences below. With them on, the planted record (A-208, L-304) was detected and quarantined, and even the correct
+action on it went to a human first.
 
 ---
 
 ## Security and threat model
+
+Prompt injection is handled in layers, because no single one is enough:
+
+1. **Fencing.** Apps mark text written by outsiders (`data-aiop-untrusted`); the snapshot wraps it in `«untrusted»`
+   markers, strips fake markers inside it, and the prompt says never to follow instructions inside the fence.
+2. **Detect and quarantine.** Text addressed to the AI ("note to the AI", "system override", "no approval needed")
+   is logged as an `injection` event, the model is warned, and any change to that record needs a human.
+3. **Effect-based policy.** Whatever the model says, the policy judges what the button really does.
+4. **Company rule guards.** Where an SOP is pure arithmetic, the company can check a decision before it is
+   submitted (Riverbend's credit rules: a decision the rules do not give is refused).
+5. **Independent verification** against the database, and a human for anything irreversible.
+
+SQL injection does not reach the data: every app query is parameterised, the model has no SQL tool, and the
+verifier's connection is read-only (`tests/test_adversarial.py` throws payloads at forms, URLs and the verifier).
+
 
 See [docs/architecture.md](docs/architecture.md). In short: the model gets a small fixed set of tools (goto, click, fill, select, read and submit_form,
 plus note and assign, which only compute) and no JavaScript, download or file tool; navigation is limited to the company's allowed origins; every consequential action is judged by
@@ -176,6 +195,9 @@ local and the data is fictional.
 - **Goal checks are written per task.** A new task can only be VERIFIED if someone writes its goal checks; otherwise it
   ends UNVERIFIED (invariants still run). Generating draft checks from the SOP for a human to approve would help.
 - **The verifier reads SQLite.** For a real company it would call the system's API instead; the interface is the same.
+- **Prompt injection is reduced, not solved.** The detector matches known phrasings, so a new wording can slip past it;
+  the other layers still apply. The strongest known design keeps untrusted text away from the planning model entirely
+  (a quarantined second model that only extracts values, as in Google DeepMind's CaMeL); that is the next step.
 - **Not built:** turning verified runs into reusable procedures, routing easy steps to a cheaper model, and real
   credential handling.
 
@@ -197,6 +219,6 @@ aiop/            the core (no company names or business words; a test enforces t
 companies/       one folder per company: SOP, policies, checks, seed data
 mockapps/        the two fictional companies' web apps (FastAPI + SQLite)
 console/         the operator console (start runs, watch, approve, see the verdict)
-tests/           117 tests; real browser, scripted proposer
+tests/           135 tests; real browser, scripted proposer
 docs/            architecture and threat model, held-out test
 ```

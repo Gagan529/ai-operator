@@ -67,7 +67,9 @@ component that is usually right.
 
 | Risk | What could happen | Mitigation here |
 |---|---|---|
-| Prompt injection from page content | a resume or a loan remark tells the AI to skip the SOP or approve something | the policy decides by the real effect of a control, not by the model's words; consequential effects need a human; the `INJECTION` switch exercises this |
+| Prompt injection from page content | a resume or a loan remark tells the AI to skip the SOP or approve something | outsider text is fenced as untrusted; planted instructions are detected and their record quarantined (changes need a human); the policy decides by the real effect; company rule guards (Riverbend credit rules); consequential effects need a human; the `INJECTION` switch exercises this |
+| SQL injection through forms or URLs | a payload in a field drops or rewrites tables | parameterised queries everywhere; no SQL tool for the model; read-only verifier (`tests/test_adversarial.py`) |
+| Runaway model output | one reply generates for half an hour | replies capped at `LLM_MAX_TOKENS` (8000); a cut-off reply gets a specific repair |
 | Misleading UI | a page shows success but nothing was saved | the verifier checks the database, not the page (`SILENT_FAIL` switch) |
 | Model claims success | the model says "done" on unfinished work | "done" triggers verification; a run that stops early is verified anyway |
 | Irreversible actions | rejecting a candidate, paying out money | APPROVAL_REQUIRED via interrupt; DENY for payouts with unverified documents or beyond the day's funds |
