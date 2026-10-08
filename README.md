@@ -212,6 +212,34 @@ local and the data is fictional.
 
 ---
 
+## Assumptions
+
+- Both companies, their people and their data are made up. The two mock apps stand in for real systems, and the
+  operator only ever talks to the origins listed in each `company.yaml`.
+- A company's own system tags the buttons that change business state (`data-aiop-effect`). Where a page has no tags,
+  the fallback rules in `policies.yaml` apply, and a submit nobody can classify goes to a human.
+- Text written by outsiders (resumes, loan remarks, the applicant's name and purpose) is marked untrusted by the app.
+- A person is reachable through the console to answer approvals. The console runs on 127.0.0.1 with no login.
+- The company's system of record can be read with SQL, so the verifier reads the apps' SQLite files. A real company
+  would need an API adapter behind the same interface.
+- Only the tasks listed in `checks.yaml` have goal checks. Any other task can end UNVERIFIED at best.
+- One browser and one run at a time. Each result in this README is one run on a free model.
+
+---
+
+## What it is built with
+
+- **Model:** `nvidia/nemotron-3-super-120b-a12b:free` through OpenRouter, called with the OpenAI Python SDK. Any
+  OpenAI-compatible endpoint works through `.env`. No other model or paid API is used.
+- **Libraries:** LangGraph with its SQLite checkpointer (approvals and restarts), Playwright with Chromium (the
+  browser), FastAPI and uvicorn (the mock apps and the console), pydantic, PyYAML, python-dotenv, SQLite and pytest.
+- **Written for this project:** the runtime, policy engine, verifier, recovery rules, the slot solver in `assign.py`,
+  both mock companies and the console. No template or existing agent project was used as a starting point.
+- **AI coding tool:** I used Claude Code (Anthropic) as a coding assistant while building and testing, including for a
+  security review and for running the tests on a clean cloud machine.
+
+---
+
 ## Project layout
 
 ```
