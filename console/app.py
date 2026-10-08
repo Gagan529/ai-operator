@@ -135,6 +135,8 @@ def companies():
 
 @app.post("/api/runs")
 def start_run(req: StartRun):
+    if req.company not in {f.name for f in COMPANIES.iterdir() if (f / "company.yaml").exists()}:
+        raise HTTPException(404, "unknown company")      # also stops names like ../../x reaching the filesystem
     if worker.busy:
         raise HTTPException(409, "a run is still working; wait for it to finish or pause")
     run_id = Runtime.new_state(Company.load(req.company)).run_id
