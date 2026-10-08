@@ -48,6 +48,9 @@ _SNAPSHOT_JS = r"""
   const visible = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const clean = s => (s || '').replace(/\s+/g, ' ').trim();
   const cut = (s, k) => s.length > k ? s.slice(0, k) + '…' : s;
+  // text the app marks as written by outsiders is fenced, and fake fences inside it are removed
+  const fence = (el, s) => el.closest('[data-aiop-untrusted]')
+      ? '«untrusted» ' + s.replace(/«\/?untrusted»/g, '') + ' «/untrusted»' : s;
   const tag = el => { const r = 'e' + (++n); el.setAttribute('data-aiop-ref', r); return r; };
   const labelOf = el => clean(el.getAttribute('aria-label') ||
       (el.labels && el.labels[0] ? Array.from(el.labels[0].childNodes)
@@ -81,7 +84,7 @@ _SNAPSHOT_JS = r"""
       const cells = Array.from(el.children).map(c => {
         const links = Array.from(c.querySelectorAll(INTERACTIVE));
         links.forEach(l => done.add(l));
-        return links.map(l => `[${tag(l)}] `).join('') + cut(clean(c.innerText), 200);
+        return links.map(l => `[${tag(l)}] `).join('') + fence(c, cut(clean(c.innerText), 200));
       });
       lines.push('| ' + cells.join(' | ') + ' |');
       el.querySelectorAll('*').forEach(d => done.add(d));   // the row is shown once, not cell by cell again
@@ -92,7 +95,7 @@ _SNAPSHOT_JS = r"""
       const own = clean(Array.from(el.childNodes).filter(c => c.nodeType === 3 ||
           (c.nodeType === 1 && ['B', 'STRONG', 'EM', 'I', 'CODE'].includes(c.tagName)))
           .map(c => c.textContent).join(' '));
-      if (own) lines.push(cut(own, 400));
+      if (own) lines.push(fence(el, cut(own, 400)));
     }
   }
   const err = document.querySelector('[role=alert], #error, .error');
@@ -256,6 +259,10 @@ class Browser:
 
     def read(self) -> ToolResult:
         return ToolResult(ok=True, observation=self.snapshot())
+
+    def text(self) -> str:
+        """The page's visible text, without re-tagging refs (for company rule guards)."""
+        return self.page.inner_text("body")
 
     # ---------- helpers for the runtime ----------
     def resolve(self, ref: str) -> Target:

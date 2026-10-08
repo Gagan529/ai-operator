@@ -121,7 +121,7 @@ def jobs():
     rows = con.execute("SELECT c.*, r.title FROM candidates c JOIN roles r ON r.id=c.role ORDER BY c.id").fetchall()
     con.close()
     trs = "".join(f"<tr><td>{e(r['id'])}</td><td>{e(r['name'])}</td><td>{e(r['title'])} ({e(r['role'])})</td>"
-                  f"<td>{e(r['years'])}</td><td>{e(r['application_no'])}</td><td>{e(resume_text(r))}</td></tr>"
+                  f"<td>{e(r['years'])}</td><td>{e(r['application_no'])}</td><td data-aiop-untrusted>{e(resume_text(r))}</td></tr>"
                   for r in rows)
     return page("Job board: applications", "<table><tr><th>Applicant</th><th>Name</th><th>Role</th>"
                 f"<th>Years</th><th>Application no.</th><th>Resume</th></tr>{trs}</table>")

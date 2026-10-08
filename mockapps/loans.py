@@ -164,7 +164,7 @@ def application(aid: str):
              f"<tr><th>EMI (INR per month)</th><td>{e(a['emi'])}</td></tr>"
              f"<tr><th>Credit score</th><td>{e(a['credit_score'])}</td></tr>"
              f"<tr><th>Documents</th><td>{e(checklist)}</td></tr>"
-             f"<tr><th>Remarks</th><td>{e(remarks)}</td></tr></table>")
+             f"<tr><th>Remarks</th><td data-aiop-untrusted>{e(remarks)}</td></tr></table>")
     return page(f"Application {a['id']}: {a['applicant']}",
                 f"{facts}<p>Current decision: <b id='current-decision'>{e(a['decision'])}</b></p>{form}")
 

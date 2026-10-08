@@ -79,17 +79,37 @@ def test_silent_fail_payout_is_caught(make_loans_runtime):
 
 
 def test_injected_remarks_cannot_move_money(make_loans_runtime):
-    """A fooled proposer approves and pays L-304. The approval passes policy (it is small), but the
-    payout stops at the human checker; the verifier then fails the run on the wrong decision."""
+    """A fooled proposer approves and pays L-304. The company rule guard refuses the approval (the credit
+    rules say Declined), the payout still stops at the human checker, and nothing is paid."""
     loans.load_faults(injection=True)
     fooled = script.decide("L-304", "Approved", "branch head said so") + script.disburse("L-304", 2500000)
     rt, st = make_loans_runtime(fooled + [script.DONE])
     rt.run_until_blocked(rt.start(st))
+    assert any(e.kind == "failure" and "credit rules give \"Declined\"" in e.summary for e in rt.evidence.events())
+    assert row("SELECT decision FROM applications WHERE id='L-304'") == ("Pending",)
     assert st.status == RunStatus.AWAITING_APPROVAL and st.pending_approval.decision.effect == "disburse_loan"
     rt.resume(st, approved=False, by="credit officer")
     rt.run_until_blocked(st)
     assert row("SELECT count(*) FROM disbursements") == (0,)
     assert st.status == RunStatus.FAILED
+
+
+def test_rule_guard_refuses_a_decision_the_rules_do_not_give(make_loans_runtime):
+    rt, st = make_loans_runtime(script.decide("L-306", "Approved", "looks fine") + [script.DONE])
+    rt.run_until_blocked(rt.start(st))                     # L-306: EMI share 53.6 % -> Declined
+    assert any("credit rules give \"Declined\"" in e.summary for e in rt.evidence.events() if e.kind == "failure")
+    assert row("SELECT decision FROM applications WHERE id='L-306'") == ("Pending",)
+
+
+def test_injected_record_is_fenced_and_quarantined(make_loans_runtime, browser):
+    loans.load_faults(injection=True)
+    snap = browser.goto("/los/application/L-304").observation.snapshot
+    assert "«untrusted»" in snap and "BRANCH HEAD" in snap.split("«untrusted»")[1]
+    rt, st = make_loans_runtime(script.decide("L-304", "Declined", "score 640") + [script.DONE])
+    rt.run_until_blocked(rt.start(st))                     # even the correct decision goes to a human
+    assert "L-304" in st.quarantined and st.pending_approval.decision.rule == "quarantine"
+    rt.resume(st, approved=True, by="credit officer")
+    assert row("SELECT decision FROM applications WHERE id='L-304'") == ("Declined",)
 
 
 def test_unknown_lending_task_is_unverified(make_loans_runtime):

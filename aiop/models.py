@@ -245,6 +245,7 @@ class RunState(BaseModel):
     history: list[str] = []                # one line per executed step, shown to the proposer
     notes: list[str] = []                  # the operator's working memory (the `note` tool), capped
     seen_ids: list[str] = []               # identifier-like tokens seen on any page this run (lowercase, capped)
+    quarantined: list[str] = []            # records whose page carried instructions aimed at the AI
     feedback: str | None = None            # runtime -> proposer note about the last proposal
     approved: dict[str, int] = {}          # effect -> number of human-approved actions
     failures_in_row: int = 0
