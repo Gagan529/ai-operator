@@ -160,7 +160,8 @@ first page, reply with JSON {"steps": ["short step", ...]}: 3-12 concrete steps 
 class OpenAICompatibleProposer:
     """Settings come from .env: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, and optionally
     LLM_REASONING_EFFORT (default "low"; empty = don't send it), LLM_MIN_INTERVAL_S
-    (pause between calls, to stay under a free tier's requests-per-minute), LLM_MAX_RETRIES."""
+    (pause between calls, to stay under a free tier's requests-per-minute), LLM_MAX_RETRIES, and LLM_MAX_TOKENS
+    (cap on one reply including hidden reasoning, default 8000: a runaway reply once ran 32 min)."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None, client=None):
         from dotenv import load_dotenv
@@ -176,6 +177,7 @@ class OpenAICompatibleProposer:
                             max_retries=int(os.getenv("LLM_MAX_RETRIES", "6")), timeout=60)
         self.client = client
         self.reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "low").strip()
+        self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "8000") or 8000)
         self.min_interval = float(os.getenv("LLM_MIN_INTERVAL_S", "0") or 0)
         self._last_call = 0.0
         self.tokens_in = self.tokens_out = self.tokens_cached = self.tokens_reasoning = 0
@@ -256,7 +258,7 @@ class OpenAICompatibleProposer:
         extra = {"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}
         try:
             return self.client.chat.completions.create(
-                model=self.model, messages=messages, temperature=0,
+                model=self.model, messages=messages, temperature=0, max_tokens=self.max_tokens,
                 response_format={"type": "json_object"}, **extra)
         except (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError,
                 openai.InternalServerError) as e:

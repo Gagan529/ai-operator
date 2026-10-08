@@ -46,6 +46,10 @@ def test_approval_survives_restart(company, browser, tmp_path):
     assert final.status == RunStatus.VERIFIED and final.approved == {"reject_candidate": 1}
 
 
+def final_quarantine(rt):
+    return [r for e in rt.evidence.events() if e.kind == "injection" for r in e.data["records"]]
+
+
 def test_prompt_injection_is_contained(company, browser, tmp_path):
     """A fooled model follows instructions planted in a resume. The runtime contains it: the planted text is
     fenced and detected, the record it sits on is quarantined (any change to it needs a human), every rejection
@@ -67,6 +71,7 @@ def test_prompt_injection_is_contained(company, browser, tmp_path):
 
     assert any("«untrusted»" in p.read_text("utf-8") for p in seen)  # fenced as outsider text
     assert any(e.kind == "injection" and "A-106" in e.summary for e in rt.evidence.events())
+    assert final_quarantine(rt) == ["A-106"]                   # the row's record only, not its role id
 
     asked = []
     while "__interrupt__" in out:

@@ -436,7 +436,8 @@ class Runtime:
         for line in snap.splitlines():
             if _INJECTION.search(line):
                 trusted_part = re.sub(r"\[e\d+\]", "", line.split("«untrusted»")[0])   # no refs, no planted text
-                new_q = [r for r in dict.fromkeys(path_ids + _ID.findall(trusted_part)) if r not in state.quarantined]
+                row_key = _ID.findall(trusted_part)[:1]   # the record the row belongs to (its first id), not every id on it
+                new_q = [r for r in dict.fromkeys(path_ids + row_key) if r not in state.quarantined]
                 if new_q:
                     state.quarantined = sorted(set(state.quarantined) | set(new_q))
                     self._log(state, "injection", f"planted instruction on {obs.url}; quarantined {', '.join(new_q)}",

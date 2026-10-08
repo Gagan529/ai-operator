@@ -46,6 +46,7 @@ def test_valid_reply_and_settings_sent(monkeypatch):
     assert a.tool == "click" and a.ref == "e7"
     assert fake.calls[0]["reasoning_effort"] == "low"
     assert fake.calls[0]["response_format"] == {"type": "json_object"}
+    assert fake.calls[0]["max_tokens"] == 8000                    # one reply can never run away
     assert (p.tokens_in, p.tokens_out) == (100, 10)
 
 
