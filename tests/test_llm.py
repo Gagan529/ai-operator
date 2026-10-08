@@ -126,3 +126,16 @@ def test_usage_recorded_even_when_the_reply_is_unusable(monkeypatch):
     with pytest.raises(ProposalError):
         p.propose_actions(CTX)
     assert p.last_usage["attempts"] == 2 and p.last_usage["in"] == 200      # failed calls still cost tokens
+
+
+def test_earlier_pages_shown_before_latest_snapshot(monkeypatch):
+    p, fake = proposer(['{"tool": "read"}'], monkeypatch)
+    p.propose_actions(Context(task="t", sop="s", snapshot="URL: now", feedback="fb",
+                              pages=["http://h/jobs\n[e3] R-12 needs SQL"]))
+    user = fake.calls[0]["messages"][1]["content"]
+    head = "PAGES YOU OPENED EARLIER (latest copy; refs in them are NOT valid, use only refs from LATEST SNAPSHOT):"
+    assert head + "\nhttp://h/jobs\n[e3] R-12 needs SQL" in user
+    assert user.index("RUNTIME FEEDBACK") < user.index(head) < user.index("LATEST SNAPSHOT:\nURL: now")
+    p, fake = proposer(['{"tool": "read"}'], monkeypatch)
+    p.propose_actions(CTX)
+    assert "PAGES YOU OPENED EARLIER" not in fake.calls[0]["messages"][1]["content"]   # no section without pages

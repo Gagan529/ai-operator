@@ -41,6 +41,15 @@ def test_bad_assign_goes_back_to_the_model(make_runtime):
     assert "INVALID_ACTION" in st.feedback and "S-99" in st.feedback
 
 
+def test_assign_result_note_is_never_refused(make_runtime):
+    """The runtime writes this note itself: IDs no page has shown yet must not get it refused."""
+    odd = A(tool="assign", items=[{"id": "Q-901", "priority": 1, "slots": ["Z-77"]}], slots=[{"id": "Z-77"}])
+    rt, st = make_runtime([odd])
+    rt.start(st)
+    rt.step(st)
+    assert st.notes == ["assign result: Q-901->Z-77"] and st.feedback is None
+
+
 def test_policy_allows_assign_even_with_strict_defaults():
     strict = PolicyEngine({"defaults": {"unknown_effect": "DENY", "unknown_submit": "DENY"}})
     assert strict.decide(PLACE).decision.value == "ALLOW"

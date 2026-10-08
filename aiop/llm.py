@@ -45,6 +45,7 @@ class Context:
     completed: list[str] = field(default_factory=list) # changes the runtime saw succeed
     denied: list[str] = field(default_factory=list)    # changes a human denied (final)
     feedback: str | None = None         # what the runtime said about the last proposal
+    pages: list[str] = field(default_factory=list)     # "URL\n<snapshot>" of other pages opened earlier, oldest first
 
 
 class ActionProposer(Protocol):
@@ -124,7 +125,8 @@ Rules:
   limit"), so you do not open it again.
 - A table already shows everything it has. Rows without an [eN] link have no separate page: note the rows
   you need (one note can cover several rows) and move on.
-- Use only refs from the LATEST snapshot; refs change after every step.
+- PAGES YOU OPENED EARLIER holds the latest copy of up to 3 other pages: read them instead of re-opening those
+  pages. Their refs are NOT valid. Use only refs from the LATEST snapshot; refs change after every step.
 - To CHANGE data, ALWAYS use submit_form (never click/fill/select for that): one submit_form opens the page,
   fills the form and submits it. Several can go in one batch, because each opens its own page. Work in this order:
   read the pages you need and note the facts → decide → send ALL the changes as submit_form batches of up to 5.
@@ -197,6 +199,9 @@ class OpenAICompatibleProposer:
             parts.append("STEPS SO FAR (latest last):\n" + "\n".join(ctx.history[-25:]))
         if ctx.feedback:
             parts.append(f"RUNTIME FEEDBACK ON YOUR LAST PROPOSAL:\n{ctx.feedback}")
+        if ctx.pages:
+            parts.append("PAGES YOU OPENED EARLIER (latest copy; refs in them are NOT valid, use only refs from "
+                         "LATEST SNAPSHOT):\n" + "\n\n".join(ctx.pages))
         parts.append(f"LATEST SNAPSHOT:\n{ctx.snapshot}")
         return self._ask(SYSTEM, "\n\n".join(parts), _parse_actions)
 

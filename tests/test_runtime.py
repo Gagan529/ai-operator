@@ -2,7 +2,7 @@
 import json
 import sqlite3
 
-from aiop.models import Outcome, ProposedAction as A, RunStatus
+from aiop.models import Observation, Outcome, ProposedAction as A, RunState, RunStatus, ToolResult
 from mockapps import recruiting
 from tests.scripts import DONE, screening, set_status
 
@@ -103,9 +103,10 @@ def test_checkpoint_state_is_small(make_runtime):
 
 
 def test_notes_are_working_memory(make_runtime):
-    rt, st = make_runtime([A(tool="note", value="R-12 needs Python, SQL, REST APIs; 2+ years"),
+    rt, st = make_runtime([A(tool="goto", url="/jobs"), A(tool="note", value="R-12 needs Python, SQL, REST APIs; 2+ years"),
                            A(tool="note", value="x" * 5000)] + screening() + [DONE])
     rt.start(st)
+    rt.step(st)                                                 # open the page that shows R-12
     rt.step(st)
     assert st.notes == ["R-12 needs Python, SQL, REST APIs; 2+ years"]
     assert "R-12 needs Python" in rt._ctx(st).notes[0]          # shown to the model on later steps
@@ -294,3 +295,64 @@ def test_unknown_task_ends_unverified(make_runtime):
     assert st.status == RunStatus.UNVERIFIED and st.verification == Outcome.UNVERIFIED
     assert "no goal checks" in st.stop_reason
     assert "UNVERIFIED" in (rt.evidence.dir / "report.html").read_text(encoding="utf-8")
+
+
+# ---------- page memory and the note check ----------
+def test_page_memory_keeps_three_earlier_pages(make_runtime, server):
+    rt, st = make_runtime([A(tool="goto", url=u) for u in ["/jobs", "/ats", "/calendar", "/ats/candidate/A-101",
+                                                           "/jobs?from=test"]])
+    rt.start(st)
+    for _ in range(4):
+        rt.step(st)
+    pages = rt._ctx(st).pages                                   # now on A-101: the 3 most recent OTHER pages
+    assert [p.split("\n", 1)[0] for p in pages] == [f"{server}/jobs", f"{server}/ats", f"{server}/calendar"]
+    assert all(len(p.split("\n", 1)[1]) <= 3000 + len("… (truncated)") for p in pages)
+    rt.step(st)                                                 # back on /jobs (the query is not part of the key)
+    urls = [p.split("\n", 1)[0] for p in rt._ctx(st).pages]
+    assert urls == [f"{server}/ats", f"{server}/calendar", f"{server}/ats/candidate/A-101"]
+
+
+def test_long_page_is_truncated_in_memory(make_runtime):
+    rt, st = make_runtime([])
+    rt.start(st)
+    big = Observation(url="http://x/big?page=2", title="t", http_status=200, error_text=None, snapshot="y" * 5000)
+    rt._observe(st, ToolResult(ok=True, observation=big))
+    rt._observe(st, rt.browser.read())                          # back on a real page; /big is now "earlier"
+    page = rt._ctx(st).pages[-1]
+    assert page == "http://x/big\n" + "y" * 3000 + "… (truncated)"
+
+
+def test_note_naming_a_shown_id_is_accepted(make_runtime):
+    rt, st = make_runtime([A(tool="goto", url="/ats"), A(tool="note", value="a-101 and A-103: open")])
+    rt.start(st)
+    rt.step(st)
+    rt.step(st)
+    assert st.notes == ["a-101 and A-103: open"]               # case does not matter
+
+
+def test_note_with_an_invented_id_is_refused(make_runtime):
+    rt, st = make_runtime([A(tool="goto", url="/ats"), A(tool="note", value="A-101 (3y, app999)")])
+    rt.start(st)
+    rt.step(st)
+    rt.step(st)
+    assert st.notes == [] and st.status == RunStatus.RUNNING
+    assert "INVALID_ACTION" in st.feedback and "app999" in st.feedback and "A-101" not in st.feedback
+    assert "do not make them up" in st.feedback
+
+
+def test_note_with_only_numbers_is_accepted(make_runtime):
+    rt, st = make_runtime([A(tool="note", value="EMI share 48.75%; 3y, 4yrs; 10 slots")])
+    rt.start(st)
+    rt.step(st)
+    assert st.notes == ["EMI share 48.75%; 3y, 4yrs; 10 slots"]
+
+
+def test_seen_ids_are_kept_and_capped(make_runtime):
+    rt, st = make_runtime([A(tool="goto", url="/ats")])
+    rt.start(st)
+    rt.step(st)
+    assert "a-101" in st.seen_ids and st.seen_ids == sorted(set(st.seen_ids))
+    assert RunState.model_validate_json(st.model_dump_json()).seen_ids == st.seen_ids   # survives a checkpoint
+    st.seen_ids = [f"zz{i:04d}" for i in range(4998)]
+    rt._observe(st, rt.browser.read())
+    assert len(st.seen_ids) == 5000

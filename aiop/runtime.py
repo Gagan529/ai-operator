@@ -10,6 +10,7 @@ The runtime works without LangGraph: `run_until_blocked()` is a plain loop.
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from urllib.parse import urlparse
@@ -27,6 +28,10 @@ from aiop.policy import PolicyEngine
 from aiop.recovery import Move, classify_exception, classify_result, decide
 from aiop.verify import Verifier
 
+# Identifier-like tokens: start with a letter, contain a digit (A-203, app203, S11; not 3y, 48.75, 10).
+_ID = re.compile(r"\b[A-Za-z][A-Za-z_-]*\d[\w-]*\b")
+PAGES_KEPT, PAGE_CHARS, MAX_SEEN_IDS = 3, 3000, 5000
+
 
 class Runtime:
     def __init__(self, company: Company, browser: Browser, proposer: ActionProposer,
@@ -39,6 +44,9 @@ class Runtime:
         self.verifier = Verifier(company.db_path, company.invariants)
         self.sleep = sleep
         self._snapshot: str | None = None   # latest full snapshot; never put in the checkpoint
+        # Page memory: URL (no query) -> latest snapshot, truncated, most recent last. Also not in the
+        # checkpoint: after a resume from a checkpoint it simply starts empty.
+        self._pages: dict[str, str] = {}
 
     # ---------- lifecycle ----------
     @staticmethod
@@ -150,13 +158,22 @@ class Runtime:
                                   f"seeing this page: {said}. If they are still needed, propose them again now.")
         return state
 
-    def _note(self, state: RunState, text: str) -> RunState:
-        """Working memory: facts the model will need on later pages. Kept small and capped."""
+    def _note(self, state: RunState, text: str, trusted: bool = False) -> RunState:
+        """Working memory: facts the model will need on later pages. Kept small and capped.
+        `trusted`: written by the runtime itself (e.g. the assign result), so not checked for invented IDs."""
         b = state.budgets
         text = " ".join(text.split())
         if not text:
             return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION,
                                                message="empty note: write a note after you have seen the page"))
+        if not trusted:
+            known = f"{state.task}\n{self.company.sop}".lower()
+            unseen = [t for t in dict.fromkeys(_ID.findall(text)) if t.lower() not in known
+                      and not any(t.lower() in s for s in state.seen_ids)]
+            if unseen:
+                return self._failed(state, Failure(kind=FailureKind.INVALID_ACTION, message=(
+                    f"your note names {', '.join(unseen[:10])}, which no page you have opened shows. "
+                    f"Copy values exactly from the pages; do not make them up")))
         cut = len(text) > b.max_note_chars
         text = text[:b.max_note_chars]
         if sum(len(n) for n in state.notes) + len(text) > b.max_notes_chars:
@@ -182,7 +199,7 @@ class Runtime:
             "slots": [s.model_dump() for s in action.slots or []],
             "result": result.model_dump()})
         self._log(state, "assign", result.summary(), result.model_dump(), artifact=rel)
-        return self._note(state, result.summary())
+        return self._note(state, result.summary(), trusted=True)
 
     # ---------- approvals ----------
     def resume(self, state: RunState, approved: bool, by: str = "human", note: str = "") -> RunState:
@@ -381,6 +398,16 @@ class Runtime:
     def _observe(self, state: RunState, result: ToolResult) -> None:
         obs: Observation = result.observation
         self._snapshot = obs.snapshot
+        key = obs.url.split("?", 1)[0]
+        self._pages.pop(key, None)           # re-insert: most recently visited last
+        snap = obs.snapshot
+        self._pages[key] = snap if len(snap) <= PAGE_CHARS else snap[:PAGE_CHARS] + "… (truncated)"
+        for old in list(self._pages)[:-(PAGES_KEPT + 1)]:   # the current page plus 3 others
+            del self._pages[old]
+        new = {t.lower() for t in _ID.findall(snap)} - set(state.seen_ids)
+        room = MAX_SEEN_IDS - len(state.seen_ids)
+        if new and room > 0:                 # first seen are kept; the cap bounds the checkpoint size
+            state.seen_ids = sorted(set(state.seen_ids) | set(sorted(new)[:room]))
         rel = self.evidence.save_text(f"observations/{state.step:03d}-{len(state.event_ids):04d}.txt", obs.snapshot)
         state.last_observation = ObservationSummary(url=obs.url, title=obs.title, http_status=obs.http_status,
                                                     error_text=obs.error_text, evidence_ref=rel)
@@ -395,9 +422,11 @@ class Runtime:
     def _ctx(self, state: RunState) -> Context:
         if self._snapshot is None:           # e.g. after resuming from a checkpoint
             self._snapshot = self.browser.read().observation.snapshot
+        here = state.last_observation.url.split("?", 1)[0] if state.last_observation else None
+        pages = [f"{url}\n{snap}" for url, snap in self._pages.items() if url != here][-PAGES_KEPT:]
         return Context(task=state.task, sop=self.company.sop, snapshot=self._snapshot, plan=state.plan,
                        history=state.history, feedback=state.feedback, notes=state.notes,
-                       completed=state.completed, denied=state.denied)
+                       completed=state.completed, denied=state.denied, pages=pages)
 
     def _tokens(self, state: RunState, kind: str) -> None:
         p = self.proposer
