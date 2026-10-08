@@ -49,6 +49,7 @@ class StartRun(BaseModel):
 
 
 class Answer(BaseModel):
+    approval_id: str                 # which approval request this answers; a stale answer is refused
     approved: bool
     note: str = ""
 
@@ -99,8 +100,11 @@ class Worker:
         self._drive(run_id, {"run": state.model_dump(mode="json")})
 
     def answer(self, run_id: str, a: Answer) -> None:
+        if (graph.pending(self._app, run_id) or {}).get("approval_id") != a.approval_id:
+            return                   # queued twice, or that request was already answered
         self.runs[run_id]["interrupt"] = None
-        self._drive(run_id, Command(resume={"approved": a.approved, "by": "console user", "note": a.note}))
+        self._drive(run_id, Command(resume={"approval_id": a.approval_id, "approved": a.approved,
+                                            "by": "console user", "note": a.note}))
 
     def _drive(self, run_id: str, payload: Any) -> None:
         entry = self.runs.setdefault(run_id, {})
@@ -150,6 +154,8 @@ def answer(run_id: str, a: Answer):
     entry = worker.runs.get(run_id)
     if not entry or not entry.get("interrupt"):
         raise HTTPException(409, "this run is not waiting for approval")
+    if entry["interrupt"].get("approval_id") != a.approval_id:
+        raise HTTPException(409, "this answer is for a different approval request")
     worker.submit(worker.answer, run_id, a)
     return {"ok": True}
 

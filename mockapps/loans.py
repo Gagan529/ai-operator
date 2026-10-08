@@ -156,8 +156,8 @@ def application(aid: str):
             f"<label>Decision <select name='decision' id='decision'>{opts}</select></label><br>"
             f"<label>Note <input name='note' id='note' size='60' value='{e(a['note'])}'></label><br>"
             "<button type='submit' id='save'>Save decision</button></form>")
-    facts = (f"<table><tr><th>Applicant</th><td>{e(a['applicant'])}</td></tr>"
-             f"<tr><th>Purpose</th><td>{e(a['purpose'])}</td></tr>"
+    facts = (f"<table><tr><th>Applicant</th><td data-aiop-untrusted>{e(a['applicant'])}</td></tr>"   # typed by the customer
+             f"<tr><th>Purpose</th><td data-aiop-untrusted>{e(a['purpose'])}</td></tr>"
              f"<tr><th>Amount (INR)</th><td>{e(a['amount'])}</td></tr>"
              f"<tr><th>Tenure (months)</th><td>{e(a['tenure_months'])}</td></tr>"
              f"<tr><th>Monthly income (INR)</th><td>{e(a['monthly_income'])}</td></tr>"

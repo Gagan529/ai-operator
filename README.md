@@ -198,6 +198,15 @@ local and the data is fictional.
 - **Prompt injection is reduced, not solved.** The detector matches known phrasings, so a new wording can slip past it;
   the other layers still apply. The strongest known design keeps untrusted text away from the planning model entirely
   (a quarantined second model that only extracts values, as in Google DeepMind's CaMeL); that is the next step.
+- **Security audit (09-10).** I attacked my own build. Three findings were fixed with tests (`tests/test_security.py`):
+  an approval answer is now bound to its exact request (a stale or replayed answer is refused), the approval card
+  shows the real record instead of only the model's description, and the loan guard can no longer be steered by numbers a
+  customer typed into the application. Known gaps that remain, all outside what the mock apps expose:
+  - the console has no login (it listens on 127.0.0.1 only), and `/runs` serves the demo databases and evidence;
+  - a link's own effect tag is ignored, and untagged JavaScript buttons are allowed;
+  - another site is blocked only after the browser has loaded it;
+  - a submit that times out is retried, which needs idempotency keys on a real system;
+  - notes can carry page text out of the untrusted fence.
 - **Not built:** turning verified runs into reusable procedures, routing easy steps to a cheaper model, and real
   credential handling.
 
@@ -219,6 +228,6 @@ aiop/            the core (no company names or business words; a test enforces t
 companies/       one folder per company: SOP, policies, checks, seed data
 mockapps/        the two fictional companies' web apps (FastAPI + SQLite)
 console/         the operator console (start runs, watch, approve, see the verdict)
-tests/           135 tests; real browser, scripted proposer
+tests/           138 tests; real browser, scripted proposer
 docs/            architecture and threat model, held-out test
 ```

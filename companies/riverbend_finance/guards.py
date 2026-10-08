@@ -9,13 +9,14 @@ DECISION_EFFECTS = {"approve_loan", "approve_large_loan", "refer_loan", "decline
 
 
 def _num(label: str, text: str) -> int | None:
-    m = re.search(re.escape(label) + r"[^\n\d]*([\d,]+)", text)
+    # only the table row that starts with this label: a number a customer typed into Purpose does not count
+    m = re.search(r"^" + re.escape(label) + r"[^\t\n]*\t([\d,]+)\s*$", text, re.M)
     return int(m.group(1).replace(",", "")) if m else None
 
 
 def expected(text: str) -> str | None:
     score, income, emi = _num("Credit score", text), _num("Monthly income", text), _num("EMI", text)
-    docs = re.search(r"Documents\t([^\n]*)", text)   # the table row, not the "Documents" link in the menu
+    docs = re.search(r"^Documents\t([^\n]*)", text, re.M)   # the table row, not the "Documents" link in the menu
     if None in (score, income, emi) or not income or not docs:
         return None                                   # not an application page: nothing to check
     share = emi / income

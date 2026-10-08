@@ -116,7 +116,8 @@
           <p><span class="badge b-warn" id="apEffect"></span></p>
           <p id="apReason"></p>
           <p class="muted">Rule: <code id="apRule"></code></p>
-          <p class="muted">Agent's step: <span id="apAction"></span></p>
+          <p>Record: <code id="apTarget"></code></p>
+          <p class="muted">The model says (unchecked): <span id="apAction"></span></p>
           <table id="apFields"></table>
           <label for="apNote">Note (optional)</label>
           <input type="text" id="apNote" placeholder="why">
@@ -248,10 +249,12 @@ async function poll() {
   }
 }
 
+let currentAp = null;
 function showApproval(ap) {
   if (!ap) { $("approval").classList.add("hidden"); return; }
   $("approval").classList.remove("hidden");
   $("apEffect").textContent = ap.effect || "unknown effect";
+  currentAp = ap; $("apTarget").textContent = ap.target;
   $("apReason").textContent = ap.reason; $("apRule").textContent = ap.rule; $("apAction").textContent = ap.action;
   $("apFields").innerHTML = Object.entries(ap.fields || {}).map(([k, val]) => `<tr><th>${esc(k)}</th><td>${esc(val)}</td></tr>`).join("");
   const req = [...allEvents].reverse().find(e => e.kind === "approval_request");
@@ -260,7 +263,7 @@ function showApproval(ap) {
 async function answer(approved) {
   $("approveBtn").disabled = $("denyBtn").disabled = true;
   const r = await fetch(`/api/runs/${runId}/answer`, { method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ approved, note: $("apNote").value }) });
+    body: JSON.stringify({ approval_id: currentAp.approval_id, approved, note: $("apNote").value }) });
   if (!r.ok) { $("error").textContent = await errorText(r); $("error").classList.remove("hidden"); }
   $("apNote").value = ""; $("approval").classList.add("hidden");
   $("approveBtn").disabled = $("denyBtn").disabled = false;

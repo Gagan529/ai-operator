@@ -104,7 +104,8 @@ def test_rule_guard_refuses_a_decision_the_rules_do_not_give(make_loans_runtime)
 def test_injected_record_is_fenced_and_quarantined(make_loans_runtime, browser):
     loans.load_faults(injection=True)
     snap = browser.goto("/los/application/L-304").observation.snapshot
-    assert "«untrusted»" in snap and "BRANCH HEAD" in snap.split("«untrusted»")[1]
+    fenced = [part.split("«/untrusted»")[0] for part in snap.split("«untrusted»")[1:]]
+    assert any("BRANCH HEAD" in part for part in fenced)
     rt, st = make_loans_runtime(script.decide("L-304", "Declined", "score 640") + [script.DONE])
     rt.run_until_blocked(rt.start(st))                     # even the correct decision goes to a human
     assert "L-304" in st.quarantined and st.pending_approval.decision.rule == "quarantine"

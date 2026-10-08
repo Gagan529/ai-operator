@@ -120,5 +120,7 @@ def test_console_refuses_unknown_or_traversing_company(console, company):
 def test_console_rejects_bad_requests(console):
     assert console.post("/api/runs", json={"company": "acme_talent", "proposer": "root"}).status_code == 422
     assert console.get("/api/runs/does-not-exist").status_code == 404
-    assert console.post("/api/runs/does-not-exist/answer", json={"approved": True}).status_code == 409
+    assert console.post("/api/runs/does-not-exist/answer", json={"approved": True}).status_code == 422  # no approval_id
+    assert console.post("/api/runs/does-not-exist/answer",
+                        json={"approval_id": "x/step-1", "approved": True}).status_code == 409
     assert console.get("/runs/../.env").status_code == 404                 # static files stay inside runs/

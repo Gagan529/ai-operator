@@ -14,6 +14,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
@@ -41,10 +42,13 @@ def build(runtime: Runtime, checkpointer: SqliteSaver):
         pending = state.pending_approval
         assert pending is not None
         # Nothing above this line may have side effects: the node re-runs on resume.
-        answer = interrupt({"run_id": state.run_id, "effect": pending.decision.effect,
+        t = pending.target
+        approval_id = f"{state.run_id}/step-{state.step}"   # an answer counts only for this exact request
+        answer = interrupt({"run_id": state.run_id, "approval_id": approval_id, "effect": pending.decision.effect,
                            "reason": pending.decision.reason, "rule": pending.decision.rule,
-                           "action": pending.action.reason or pending.action.tool,
-                           "fields": pending.target.form_fields})
+                           "target": urlparse(t.form_action or t.href or t.page_url).path,   # the real record
+                           "action": pending.action.reason or pending.action.tool,           # the model's words
+                           "fields": t.form_fields})
         answer = answer if isinstance(answer, dict) else {"approved": bool(answer)}
         runtime.resume(state, approved=bool(answer.get("approved")), by=str(answer.get("by", "human")),
                        note=str(answer.get("note", "")))
@@ -84,8 +88,13 @@ def start(app, state: RunState) -> dict[str, Any]:
 
 
 def answer(app, run_id: str, approved: bool, by: str = "human", note: str = "",
-           max_steps: int = 60) -> dict[str, Any]:
-    return app.invoke(Command(resume={"approved": approved, "by": by, "note": note}), config(run_id, max_steps))
+           max_steps: int = 60, approval_id: str | None = None) -> dict[str, Any]:
+    # checked before resuming: LangGraph would keep a refused answer as the reply to this interrupt
+    open_id = (pending(app, run_id) or {}).get("approval_id")
+    if approval_id is not None and approval_id != open_id:
+        raise ValueError(f"answer is for {approval_id}, but the open request is {open_id}")
+    return app.invoke(Command(resume={"approval_id": approval_id, "approved": approved, "by": by, "note": note}),
+                      config(run_id, max_steps))
 
 
 def stream(app, payload: Any, run_id: str, max_steps: int = 60):
