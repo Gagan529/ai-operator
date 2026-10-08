@@ -134,3 +134,36 @@ The open weakness is note-taking. The model has trouble when it needs facts from
 once, and it can write invented values into a note. What could address it, not built: have the
 runtime keep a compact copy of each page the model has opened, instead of relying on the
 model's own notes, and cross-check numbers in notes against the snapshots they came from.
+
+## Second round: page memory and the note check (08-10 evening)
+
+The two open weaknesses above were fixed in commit `dd94806`, again in the core and without naming any company:
+
+- Page memory. The runtime now keeps the latest copy of the last 3 other pages the model opened (3,000 characters
+  each, outside the checkpoint) and shows them before the current page. The model no longer has to note a page just
+  to remember it while it looks at another one.
+- Note check. A note that names an identifier (a token starting with a letter and containing a digit, such as `A-203`
+  or `app203`) is refused unless that identifier appeared on a page the model has seen, or in the task or the SOP.
+  Plain numbers and the model's own arithmetic are always allowed.
+
+Then all six tasks were run once more, live, on fresh data (Thu 08-10, 20:16 to 21:13 IST), with the same approval
+rules (for the loans default task: the L-302 sign-off, and payouts only for L-301, L-302 and L-308 at their full
+amounts, INR 91 lakh against INR 1 crore of funds).
+
+| Task | Run | Result | Checks | Time | Steps / LLM calls | Approvals |
+|---|---|---|---|---|---|---|
+| H1 | `20261008-201606-de72` | **VERIFIED** | 7 of 7 | 1.9 min | 7 / 5 | none |
+| H2 | `20261008-201802-2e8f` | **VERIFIED** | 7 of 7 | 1.4 min | 6 / 5 | 2 rejections |
+| H3 | `20261008-201927-3073` | **VERIFIED** | 8 of 8 | 18.1 min | 30 / 23 | L-302 sign-off |
+| H4 | `20261008-203731-8238` | **VERIFIED** | 8 of 8 | 8.9 min | 25 / 22 | L-302 sign-off and payout |
+| Acme default | `20261008-204624-7a62` | **VERIFIED** | 9 of 9 | 5.2 min | 19 / 12 | none |
+| Riverbend default | `20261008-205135-c54d` | **VERIFIED** | 8 of 8 | 21.5 min | 35 / 30 | L-302 sign-off, 3 payouts |
+
+All six passed every check. H1, which failed in both earlier rounds, now finishes in 5 LLM calls. In the Acme default
+run the `assign` input used the real application numbers, so the tie-break came out right (A-207, application 2,
+before A-203, application 7).
+
+To be exact about what fixed what: the note check never fired in these six runs. With the earlier pages in front of
+it, the model copied the real values instead of inventing them, so page memory did the work. The refusal itself is
+covered by unit tests (117 tests in total). Each of these is one run on a free model, so it shows the fixes work,
+not that every future run will pass.
