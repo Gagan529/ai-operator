@@ -26,6 +26,8 @@ from pathlib import Path
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from mockapps.theme import shell
+
 ROOT = Path(__file__).resolve().parent.parent
 SEED = ROOT / "companies" / "acme_talent" / "seed.json"   # tests point this at tests/fixtures/
 DB = ROOT / "runs" / "acme_talent.db"
@@ -89,10 +91,7 @@ def reset() -> None:
 
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     nav = '<nav><a href="/">Home</a> · <a href="/jobs">Job board</a> · <a href="/ats">ATS</a> · <a href="/calendar">Calendar</a></nav>'
-    return HTMLResponse(f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)}</title>"
-                        "<style>body{font-family:sans-serif;max-width:900px;margin:20px auto}"
-                        "table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style>"
-                        f"</head><body>{nav}<h1>{html.escape(title)}</h1>{body}</body></html>", status_code=status_code)
+    return HTMLResponse(shell("Acme Talent", "#4f46e5", nav, html.escape(title), body), status_code=status_code)
 
 
 def e(x) -> str:

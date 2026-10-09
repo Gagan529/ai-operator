@@ -24,6 +24,8 @@ from pathlib import Path
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from mockapps.theme import shell
+
 ROOT = Path(__file__).resolve().parent.parent
 SEED = ROOT / "companies" / "riverbend_finance" / "seed.json"
 DB = ROOT / "runs" / "riverbend_finance.db"
@@ -88,10 +90,7 @@ def reset() -> None:
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     nav = ('<nav><a href="/">Home</a> · <a href="/los">Loan applications</a> · <a href="/docs">Documents</a>'
            ' · <a href="/disburse">Disbursement</a></nav>')
-    return HTMLResponse(f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)}</title>"
-                        "<style>body{font-family:sans-serif;max-width:900px;margin:20px auto}"
-                        "table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style>"
-                        f"</head><body>{nav}<h1>{html.escape(title)}</h1>{body}</body></html>", status_code=status_code)
+    return HTMLResponse(shell("Riverbend Home Finance", "#0f766e", nav, html.escape(title), body), status_code=status_code)
 
 
 def e(x) -> str:
